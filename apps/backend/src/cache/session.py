@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 SESSION_TTL: int = 1800  # 30 minutes in seconds
 SESSION_PREFIX: str = "session:"
 LOCK_PREFIX: str = "lock:session:"
-LOCK_TIMEOUT: int = 30  # seconds
+LOCK_TIMEOUT: int = 120  # seconds — must exceed max agent turn time (5 iters × ~20s)
 TTL_WARNING_THRESHOLD: int = 300  # 5 minutes — flag when TTL drops below this
 
 # ---------------------------------------------------------------------------
@@ -192,10 +192,20 @@ async def update_session(session_id: str, **fields: Any) -> dict[str, Any]:
 
 async def add_message(session_id: str, role: str, content: str) -> None:
     """Append a message to the session's messages list and refresh TTL."""
+    await append_message(session_id, {"role": role, "content": content})
+
+
+async def append_message(session_id: str, msg: dict[str, Any]) -> None:
+    """Append an arbitrary message dict to the session's messages list.
+
+    Unlike :func:`add_message` (which only stores ``{role, content}``), this
+    accepts any dict shape — including ``function_call`` and
+    ``function_response`` messages needed by the orchestrator.
+    """
     session = await get_session(session_id)
     session.pop("ttl_warning", None)
 
-    session["messages"].append({"role": role, "content": content})
+    session["messages"].append(msg)
     session["updated_at"] = time.time()
 
     key = _session_key(session_id)
