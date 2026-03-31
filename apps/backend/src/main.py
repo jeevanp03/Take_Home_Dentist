@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.auth_routes import router as auth_router
+from src.api.routes import router as core_router
 from src.cache.redis_client import close_redis, get_redis, is_using_fallback
 from src.config import get_settings
 from src.db.database import init_db
@@ -82,6 +84,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+# --- Register routers ---
+app.include_router(auth_router)
+app.include_router(core_router)
 
 
 @app.get("/api/health")

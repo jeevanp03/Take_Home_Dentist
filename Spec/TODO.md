@@ -242,30 +242,12 @@
 
 ---
 
-## Phase 3A: JWT Authentication + Patient Identification (~45 min)
+## Phase 3A: JWT Authentication + Patient Identification (~45 min) ✅
 
-- [ ] **3A.1** Create JWT auth helpers (`src/api/auth.py`)
-  - `TokenData`, `TokenResponse` models
-  - `create_access_token()` → JWT via python-jose HS256
-  - `verify_token()` → FastAPI Depends, raises 401 with `WWW-Authenticate: Bearer`
-
-- [ ] **3A.2** Create auth routes (`src/api/auth_routes.py`)
-  - `POST /api/auth/token` — issue JWT (session_id in claims), no auth required
-  - `POST /api/auth/refresh` — refresh, requires valid JWT
-  - Register in `main.py`
-
-- [ ] **3A.3** Create patient identification endpoint (`src/api/routes.py`)
-  - `POST /api/identify` — called by frontend after the welcome screen choice
-  - Request body: `{ mode: "returning" | "new" | "question", name?: str, phone?: str }`
-  - **Returning**: lookup patient by name + phone → if found, load patient record + upcoming appointments + past conversation summaries → inject all into Redis session → return patient context to frontend
-  - **New**: check for existing (prevent duplicates) → if not found, create patient with name + phone → inject patient_id into session → return. Agent will conversationally collect DOB + insurance
-  - **Question**: no lookup needed, just create session → return. Agent handles everything
-  - Requires valid JWT (session_id from claims)
-  - Returns: `{ patient_id?, patient_name?, upcoming_appointments[], needs_info: ["dob", "insurance"] }`
-
-- [ ] **3A.4** Protect routes with JWT
-  - `POST /api/chat`, `POST /api/identify`, `GET /api/slots` use `Depends(verify_token)`
-  - Session_id from JWT claims, not request body
+- [x] **3A.1** Create JWT auth helpers (`src/api/auth.py`) — HS256 via python-jose, `create_access_token()`, `verify_token()` FastAPI dependency, 1hr expiry
+- [x] **3A.2** Create auth routes (`src/api/auth_routes.py`) — `POST /api/auth/token` (no auth), `POST /api/auth/refresh` (requires valid JWT), registered in main.py
+- [x] **3A.3** Create patient identification endpoint (`src/api/routes.py`) — `POST /api/identify` with returning/new/question modes, phone normalization, duplicate detection, patient context injection into Redis session
+- [x] **3A.4** Protect routes with JWT — `/api/identify` and `/api/auth/refresh` require `Depends(verify_token)`, session_id from JWT claims. 15 endpoint tests (token creation, refresh, auth enforcement, all 3 identify modes, duplicate detection, validation errors)
 
 ---
 

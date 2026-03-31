@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 _NON_DIGIT = re.compile(r"\D")
 
 
-def _normalize_phone(raw: str) -> str:
+def normalize_phone(raw: str) -> str:
     """Strip non-digit characters and validate length.
 
     Accepts common US formats: 555-123-4567, (555) 123-4567, 555.123.4567,
@@ -61,7 +61,7 @@ class LookupPatientInput(BaseModel):
     def normalize_phone(cls, v: str | None) -> str | None:
         if v is None:
             return None
-        return _normalize_phone(v)
+        return normalize_phone(v)
 
 
 class CreatePatientInput(BaseModel):
@@ -73,7 +73,7 @@ class CreatePatientInput(BaseModel):
     @field_validator("phone", mode="before")
     @classmethod
     def normalize_phone(cls, v: str) -> str:
-        return _normalize_phone(v)
+        return normalize_phone(v)
 
 
 class UpdatePatientInput(BaseModel):
