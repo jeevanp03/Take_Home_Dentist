@@ -32,7 +32,7 @@ _BACKOFF_BASE = 1.0  # seconds
 # Per-call timeout (prevents hung API calls from holding semaphore forever)
 _CALL_TIMEOUT = 30.0  # seconds
 
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 def _get_init_lock() -> asyncio.Lock:
