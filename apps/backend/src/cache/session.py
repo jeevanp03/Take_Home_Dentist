@@ -262,16 +262,28 @@ async def acquire_session_lock(session_id: str) -> str | None:
         return token
 
 
+# Lua script for atomic lock release — only deletes if the token matches.
+# Prevents TOCTOU race between GET and DELETE.
+_RELEASE_LOCK_SCRIPT = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+else
+    return 0
+end
+"""
+
+
 async def release_session_lock(session_id: str, token: str) -> None:
-    """Release the exclusive session lock only if *token* matches."""
+    """Release the exclusive session lock only if *token* matches.
+
+    Uses a Lua script for atomic check-and-delete on Redis to prevent
+    TOCTOU race conditions.
+    """
     key = _lock_key(session_id)
     r = await _redis_or_none()
 
     if r is not None:
-        # Only delete if we own the lock
-        current = await r.get(key)
-        if current == token:
-            await r.delete(key)
+        await r.eval(_RELEASE_LOCK_SCRIPT, 1, key, token)
     else:
         async with _fallback_lock:
             store = get_fallback_store()

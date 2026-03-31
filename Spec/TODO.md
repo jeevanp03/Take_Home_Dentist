@@ -571,6 +571,46 @@
 
 ---
 
+## Code Review Findings — Future Work
+
+Items identified during full code review that are out of scope for current phase but should be addressed before production.
+
+### Production / Deployment (Pre-Launch)
+
+- [ ] **CR.1** Obtain BAA (Business Associate Agreement) with Google for Gemini API, or switch to Vertex AI / self-hosted LLM for PHI-compliant LLM calls
+- [ ] **CR.2** Enable encryption at rest: SQLCipher for SQLite (or migrate to PostgreSQL with pgcrypto), encrypted volume for ChromaDB persist directory, Redis AUTH + TLS (`rediss://`)
+- [ ] **CR.3** Implement structured HIPAA audit logging — record every PHI access with session_id, action, resource_type, resource_id, timestamp
+- [ ] **CR.4** Enforce JWT authentication on ALL PHI-touching endpoints (Phase 3A) — ensure auth guard is part of initial route implementation
+- [ ] **CR.5** Implement data retention policy for conversation_logs, ChromaDB conversations, and archived appointments
+- [ ] **CR.6** Encrypt `conversation_logs.messages` at the application layer (e.g., `cryptography.Fernet`) — highest PHI concentration field
+- [ ] **CR.7** Disable or harden Redis in-memory fallback in production (raise instead of falling back, or encrypt fallback values)
+- [ ] **CR.8** Validate `REDIS_URL` requires TLS (`rediss://`) when `DEBUG=False`
+- [ ] **CR.9** Add startup check that rejects plaintext Redis in production
+
+### Enhancements
+
+- [ ] **CR.10** Add `provider_name` filter to `GetAvailableSlotsInput` — enables "check Dr. Chen's availability" flows
+- [ ] **CR.11** Expose `SlotRepository.get_consecutive` as a tool for family booking (back-to-back slots)
+- [ ] **CR.12** Add phone number normalization in `CreatePatientInput` / `LookupPatientInput` — strip non-digits, validate length to prevent phantom duplicates
+- [ ] **CR.13** Validate `patient_id` consistency in `book_appointment` — verify the LLM-provided patient_id matches session.patient_id
+- [ ] **CR.14** Clear `booking_state` in session on cancellation and reschedule (currently only set on book)
+- [ ] **CR.15** Use `call_gemini_stream` for the final text response (token-level streaming reduces perceived latency)
+- [ ] **CR.16** Warm up ChromaDB and Redis in `main.py` lifespan hook (currently lazy-init on first request)
+- [ ] **CR.17** Add `get_session` pipeline optimization — batch Redis GET + TTL into single round-trip
+
+### Knowledge Base Gaps (Dental SME)
+
+- [ ] **CR.18** Add sedation specifics to `procedures.md` (nitrous oxide, oral sedation — what the practice actually offers)
+- [ ] **CR.19** Add post-extraction aftercare content (dry socket prevention, red flags) to `procedures.md`
+- [ ] **CR.20** Add TMJ/jaw pain section to `faq.md` — very common patient complaint with no KB content
+- [ ] **CR.21** Add fluoride treatments and sealants content (common for children)
+- [ ] **CR.22** Fix root canal crown language in `procedures.md` — "usually recommended" → "strongly recommended, especially for back teeth"
+- [ ] **CR.23** Add SRP (deep cleaning) post-op guidance to `procedures.md`
+- [ ] **CR.24** Fix X-ray frequency in `faq.md` — "once a year" → "every 12-24 months for healthy adults"
+- [ ] **CR.25** Add bone grafting mention to implant description in `procedures.md`
+
+---
+
 ## Summary
 
 | Phase | Tasks | Estimated Time |

@@ -70,14 +70,14 @@ async def lookup_patient(
         return {"error": "Either phone or date_of_birth must be provided to look up a patient."}
 
     if patient is None:
-        logger.info("Patient not found: name=%r phone=%r dob=%r", name, phone, date_of_birth)
+        logger.info("Patient not found for lookup (phone_provided=%s, dob_provided=%s)", bool(phone), bool(date_of_birth))
         return {
             "error": "Patient not found. Please verify the information or create a new patient record."
         }
 
     # Persist patient_id on the session for downstream tools
     await update_session(session_id, patient_id=patient.id)
-    logger.info("Looked up patient %s (%s)", patient.id, patient.full_name)
+    logger.info("Looked up patient %s", patient.id)
     return _patient_to_dict(patient)
 
 
@@ -107,12 +107,12 @@ async def create_patient(
 
     # PatientRepository.create returns a dict on IntegrityError
     if isinstance(result, dict):
-        logger.warning("Failed to create patient %r: %s", full_name, result)
+        logger.warning("Failed to create patient: %s", result.get("error", "unknown"))
         return result
 
     # Success — update session with the new patient_id
     await update_session(session_id, patient_id=result.id)
-    logger.info("Created patient %s (%s)", result.id, full_name)
+    logger.info("Created patient %s", result.id)
     return _patient_to_dict(result)
 
 

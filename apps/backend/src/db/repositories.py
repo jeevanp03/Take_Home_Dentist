@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import functools
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from typing import Literal
 
 from sqlalchemy import select, and_
@@ -46,27 +46,34 @@ def _retry_on_integrity(fn):
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        # Static methods have no self, so db is always a keyword arg.
+        db: Session | None = kwargs.get("db")
+        if db is None:
+            # Fallback: check positional args (first positional for @staticmethod)
+            for arg in args:
+                if isinstance(arg, Session):
+                    db = arg
+                    break
+
         for attempt in range(2):
             try:
                 return fn(*args, **kwargs)
             except IntegrityError as exc:
-                # Get the session — first positional arg after self is db
-                db: Session = args[1] if len(args) > 1 else kwargs.get("db")
                 if db is not None:
                     db.rollback()
                 if attempt == 0:
                     logger.warning(
-                        "IntegrityError on %s (attempt 1), retrying: %s",
+                        "IntegrityError on %s (attempt 1), retrying.",
                         fn.__name__,
-                        exc,
                     )
                     continue
+                # Log only the constraint name, not the full SQL (may contain PHI)
                 logger.error(
                     "IntegrityError on %s (attempt 2), giving up: %s",
                     fn.__name__,
-                    exc,
+                    getattr(exc.orig, "args", ["unknown"])[0] if exc.orig else "unknown",
                 )
-                return {"error": f"Write conflict in {fn.__name__}: {exc.orig}"}
+                return {"error": f"Write conflict in {fn.__name__}. Please try again."}
         return None  # unreachable, keeps mypy happy
 
     return wrapper
@@ -134,7 +141,7 @@ class PatientRepository:
         db.add(patient)
         db.commit()
         db.refresh(patient)
-        logger.info("Created patient %s (%s)", patient.id, full_name)
+        logger.info("Created patient %s", patient.id)
         return patient
 
 
@@ -355,7 +362,7 @@ class ConversationLogRepository:
         log = db.execute(stmt).scalars().first()
         if log is None:
             return None
-        log.ended_at = datetime.utcnow()
+        log.ended_at = datetime.now(timezone.utc)
         if summary is not None:
             log.summary = summary
         db.commit()

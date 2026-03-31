@@ -482,6 +482,12 @@ async def run(
             block_reason = _is_blocked_or_truncated(response)
             if block_reason == "safety_blocked":
                 logger.warning("Mid-loop safety block at iteration %d", iteration)
+                yield _text_chunk(
+                    "I wasn't able to process that fully. Could you rephrase "
+                    "your request? I'm here to help with dental appointments "
+                    "and questions."
+                )
+                final_text_already_yielded = True
                 break
 
             response_msgs = response_to_messages(response)

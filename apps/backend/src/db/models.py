@@ -68,15 +68,17 @@ class Base(DeclarativeBase):
 # ---------------------------------------------------------------------------
 
 class Patient(Base):
+    """Patient records — all non-ID fields are PHI under HIPAA."""
+
     __tablename__ = "patients"
 
     id: Mapped[str] = mapped_column(
         String(16), primary_key=True, default=_new_id
     )
-    full_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
-    insurance_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    full_name: Mapped[str] = mapped_column(String(120), nullable=False)       # PHI: Name
+    phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # PHI: Phone
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)   # PHI: DOB
+    insurance_name: Mapped[str | None] = mapped_column(String(120), nullable=True)  # PHI: Insurance
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -151,7 +153,7 @@ class Appointment(Base):
     appointment_type: Mapped[AppointmentType] = mapped_column(
         Enum(AppointmentType), nullable=False
     )
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)  # PHI: Clinical info (symptoms, reason)
     status: Mapped[AppointmentStatus] = mapped_column(
         Enum(AppointmentStatus), default=AppointmentStatus.scheduled
     )
@@ -178,7 +180,18 @@ class Appointment(Base):
 # ---------------------------------------------------------------------------
 
 class ConversationLog(Base):
+    """Conversation transcripts — messages and summary contain PHI.
+
+    The ``messages`` field stores the full JSON transcript and may contain
+    any combination of patient name, DOB, insurance, symptoms, and
+    appointment details.  Must be encrypted at rest in production and
+    subject to a data retention policy.
+    """
+
     __tablename__ = "conversation_logs"
+    __table_args__ = (
+        UniqueConstraint("session_id", name="uq_conversation_logs_session_id"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(16), primary_key=True, default=_new_id
@@ -187,8 +200,8 @@ class ConversationLog(Base):
     patient_id: Mapped[str | None] = mapped_column(
         String(16), ForeignKey("patients.id"), nullable=True
     )
-    messages: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    messages: Mapped[str] = mapped_column(Text, nullable=False)       # PHI: Full transcript (all categories)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)  # PHI: Name, insurance, clinical info
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

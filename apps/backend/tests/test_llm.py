@@ -7,8 +7,6 @@ Run from apps/backend/:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,33 +22,14 @@ from src.agent.message_converter import (
     response_to_messages,
 )
 
-
-# ---------------------------------------------------------------------------
-# Mock helpers for response_to_messages unit tests
-# ---------------------------------------------------------------------------
-
-@dataclass
-class MockPart:
-    text: str | None = None
-    function_call: Any = None
-
-@dataclass
-class MockFunctionCall:
-    name: str = ""
-    args: dict = field(default_factory=dict)
-
-@dataclass
-class MockContent:
-    parts: list = field(default_factory=list)
-
-@dataclass
-class MockCandidate:
-    content: MockContent | None = None
-    finish_reason: str = "STOP"
-
-@dataclass
-class MockResponse:
-    candidates: list = field(default_factory=list)
+# Import shared mocks from conftest (single source of truth)
+from tests.conftest import (
+    MockCandidate,
+    MockContent,
+    MockFunctionCall,
+    MockPart,
+    MockResponse,
+)
 
 
 # ---------------------------------------------------------------------------

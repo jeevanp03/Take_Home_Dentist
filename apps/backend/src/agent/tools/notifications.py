@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# In-memory store for demo — production would use a webhook, email, or queue
-_notifications: list[dict] = []
+# In-memory store for demo — production would use a webhook, email, or queue.
+# Bounded deque prevents unbounded memory growth in long-running processes.
+_notifications: deque[dict] = deque(maxlen=500)
 
 
 async def notify_staff(
@@ -29,10 +31,11 @@ async def notify_staff(
     }
     _notifications.append(notification)
 
+    # PHI NOTE: Do not log the message content — it may contain clinical details.
     if type == "emergency":
-        logger.warning("🚨 EMERGENCY STAFF ALERT: %s (patient=%s)", message, patient_id)
+        logger.warning("EMERGENCY STAFF ALERT for patient=%s (type=%s)", patient_id, type)
     else:
-        logger.info("Staff notification [%s]: %s (patient=%s)", type, message, patient_id)
+        logger.info("Staff notification type=%s patient=%s", type, patient_id)
 
     return {
         "status": "sent",
