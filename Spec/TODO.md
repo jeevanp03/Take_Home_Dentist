@@ -235,16 +235,10 @@
 
 ---
 
-## Phase 2D: Date Parsing (~20 min)
+## Phase 2D: Date Parsing (~20 min) ✅
 
-- [ ] **2D.1** Create date parser (`src/agent/date_parser.py`)
-  - `parse_date_expression(text, reference_date=today)` → `{start: ISO, end: ISO}`
-  - Handle: "tomorrow", "next week" (Mon-Fri), "early next week" (Mon-Tue), "later next week" (Thu-Fri), "next month", "early next month" (1st-10th), "late next month" (20th-last), "this week", "ASAP"
-  - Skip Sundays, handle month boundaries
-  - **Integration note**: the LLM produces ISO dates for `get_available_slots` (Gemini is decent at this with the current date in the system prompt). The date parser serves as validation/fallback, not the primary conversion path. If the LLM passes a natural language string instead of ISO, the tool handler runs it through the parser.
-
-- [ ] **2D.2** Test date parser edge cases
-  - Sunday → Monday, Dec→Jan, "ASAP" on Saturday, "later next week" when today is Thursday
+- [x] **2D.1** Create date parser (`src/agent/date_parser.py`) — handles today, tomorrow, ASAP, this/next week, early/late next week, this/next month, early/late next month. Skips Sundays, handles month boundaries (Dec→Jan), leap years. ISO passthrough for Gemini's primary output path. Integrated as fallback in `get_available_slots`.
+- [x] **2D.2** Test date parser — 32 tests covering all expressions, edge cases (Sunday→Monday, Dec→Jan, ASAP on Saturday, later next week from Thursday, Feb 28/29, embedded in sentences, unrecognised expressions)
 
 ---
 

@@ -16,6 +16,7 @@ from datetime import date, datetime, time
 
 from sqlalchemy.orm import Session
 
+from src.agent.date_parser import parse_date_expression
 from src.cache.session import update_session
 from src.db.models import AppointmentStatus, AppointmentType, Appointment, TimeSlot
 from src.db.repositories import AppointmentRepository, SlotRepository
@@ -90,12 +91,22 @@ async def get_available_slots(
     Paginates results to the first 5 slots and reports the total count so the
     LLM can tell the patient more are available.
     """
+    # Try ISO parse first; fall back to natural-language date parser
     try:
         start = date.fromisoformat(date_start)
+    except (ValueError, TypeError):
+        parsed = parse_date_expression(date_start)
+        if parsed is None:
+            return {"error": f"Could not understand date '{date_start}'. Use YYYY-MM-DD or a phrase like 'next week'."}
+        start = date.fromisoformat(parsed["start"])
+
+    try:
         end = date.fromisoformat(date_end)
-    except (ValueError, TypeError) as exc:
-        logger.warning("Invalid date input for get_available_slots: %s", exc)
-        return {"error": f"Invalid date format. Use YYYY-MM-DD. ({exc})"}
+    except (ValueError, TypeError):
+        parsed = parse_date_expression(date_end)
+        if parsed is None:
+            return {"error": f"Could not understand date '{date_end}'. Use YYYY-MM-DD or a phrase like 'next week'."}
+        end = date.fromisoformat(parsed["end"])
 
     if start > end:
         return {"error": "date_start must be on or before date_end."}
@@ -108,7 +119,7 @@ async def get_available_slots(
 
     logger.info(
         "Found %d available slot(s) between %s and %s (showing %d).",
-        total, date_start, date_end, len(page),
+        total, start.isoformat(), end.isoformat(), len(page),
     )
 
     result: dict = {
@@ -271,8 +282,11 @@ async def get_consecutive_slots(
     """
     try:
         target = date.fromisoformat(target_date)
-    except (ValueError, TypeError) as exc:
-        return {"error": f"Invalid date format. Use YYYY-MM-DD. ({exc})"}
+    except (ValueError, TypeError):
+        parsed = parse_date_expression(target_date)
+        if parsed is None:
+            return {"error": f"Could not understand date '{target_date}'. Use YYYY-MM-DD or a phrase like 'next Tuesday'."}
+        target = date.fromisoformat(parsed["start"])
 
     slot_count = count
 

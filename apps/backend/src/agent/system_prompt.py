@@ -77,7 +77,8 @@ SCHEDULING RULES:
   any times. Say: "It looks like we don't have any openings on that day —
   would you like me to check a different day or the following week?"
   Do not call get_available_slots again with the exact same date range.
-- For date parsing: "next week" = the upcoming Mon-Fri, "early next month" = 1st-10th,
+- Always pass dates in YYYY-MM-DD format to tool arguments. For subjective dates:
+  "next week" = the upcoming Mon-Fri, "early next month" = 1st-10th,
   "later next week" = Thu-Fri of next week. Confirm your interpretation with the patient.
 - Office hours: Mon-Sat 8AM-6PM. No Sunday appointments.
 - For family bookings or longer procedures needing multiple adjacent slots, use
