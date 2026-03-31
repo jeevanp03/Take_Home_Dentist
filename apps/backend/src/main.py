@@ -102,9 +102,11 @@ async def health_check():
     try:
         from src.db.database import SessionLocal
         db = SessionLocal()
-        db.execute(sa_text("SELECT 1"))
-        db.close()
-        services["database"] = "ok"
+        try:
+            db.execute(sa_text("SELECT 1"))
+            services["database"] = "ok"
+        finally:
+            db.close()
     except Exception:
         services["database"] = "error"
 

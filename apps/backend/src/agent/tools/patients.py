@@ -122,11 +122,19 @@ async def update_patient(
     insurance_name: str | None = None,
     *,
     db: Session,
+    session_id: str,
 ) -> dict:
     """Update mutable fields on an existing patient record.
 
     Only non-None fields are applied; omitted fields are left unchanged.
     """
+    # Verify patient_id matches the session's identified patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    if session_patient and session_patient != patient_id:
+        return {"error": "Cannot update a different patient than the one identified in this session."}
+
     patient = PatientRepository.find_by_id(db, patient_id)
     if patient is None:
         logger.warning("update_patient called with unknown id: %s", patient_id)

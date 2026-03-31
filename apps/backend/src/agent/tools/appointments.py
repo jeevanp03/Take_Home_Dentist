@@ -318,8 +318,16 @@ async def get_patient_appointments(
     patient_id: str,
     *,
     db: Session,
+    session_id: str,
 ) -> dict:
     """Return a patient's upcoming (scheduled) appointments with slot details."""
+    # Verify appointment belongs to the session's patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    if session_patient and session_patient != patient_id:
+        return {"error": "Cannot retrieve appointments for a different patient."}
+
     appointments = AppointmentRepository.get_patient_appointments(
         db, patient_id, status=AppointmentStatus.scheduled
     )

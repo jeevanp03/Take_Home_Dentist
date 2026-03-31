@@ -16,8 +16,10 @@ env/
 .env.local
 .env.*.local
 
-# Database
+# Database (SQLite + WAL files)
 apps/backend/data/dental.db
+apps/backend/data/dental.db-shm
+apps/backend/data/dental.db-wal
 
 # ChromaDB persistent storage
 apps/backend/data/chroma/

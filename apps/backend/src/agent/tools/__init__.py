@@ -67,7 +67,7 @@ TOOL_REGISTRY: dict[str, _ToolEntry] = {
     "search_past_conversations": {
         "handler": search_past_conversations,
         "schema": SearchPastConversationsInput,
-        "inject": [],
+        "inject": ["session_id"],
         "description": "Search past conversation history for a specific patient.",
     },
     "lookup_patient": {
@@ -85,7 +85,7 @@ TOOL_REGISTRY: dict[str, _ToolEntry] = {
     "update_patient": {
         "handler": update_patient,
         "schema": UpdatePatientInput,
-        "inject": ["db"],
+        "inject": ["db", "session_id"],
         "description": "Update a patient's date of birth or insurance information.",
     },
     "get_available_slots": {
@@ -121,7 +121,7 @@ TOOL_REGISTRY: dict[str, _ToolEntry] = {
     "get_patient_appointments": {
         "handler": get_patient_appointments,
         "schema": GetPatientAppointmentsInput,
-        "inject": ["db"],
+        "inject": ["db", "session_id"],
         "description": "Get a patient's upcoming scheduled appointments.",
     },
     "notify_staff": {

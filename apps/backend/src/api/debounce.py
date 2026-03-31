@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-DEBOUNCE_SECONDS = 2.5  # how long to wait before dispatching
+DEBOUNCE_SECONDS = 0.5   # short initial wait — only delays if more messages arrive
+DEBOUNCE_EXTEND = 1.5    # extended wait after a second message arrives
 
 # ---------------------------------------------------------------------------
 # In-memory buffer: session_id → {messages: list[str], event: asyncio.Event}
@@ -53,8 +54,25 @@ async def debounce_message(session_id: str, message: str) -> str | None:
         # First message — create buffer and become the dispatcher
         _buffers[session_id] = {"messages": [message]}
 
-    # Wait for the debounce window (outside the lock)
-    await asyncio.sleep(DEBOUNCE_SECONDS)
+    # Short initial wait — check if more messages arrive quickly.
+    # If a second message comes in during this window, wait a bit longer.
+    try:
+        await asyncio.sleep(DEBOUNCE_SECONDS)
+
+        # Check if additional messages arrived during the short wait
+        async with _lock:
+            buf = _buffers.get(session_id)
+            got_more = buf is not None and len(buf["messages"]) > 1
+
+        if got_more:
+            # More messages arrived — wait a bit longer for the burst to finish
+            await asyncio.sleep(DEBOUNCE_EXTEND)
+
+    except asyncio.CancelledError:
+        # Clean up buffer so it doesn't block future messages
+        async with _lock:
+            _buffers.pop(session_id, None)
+        raise
 
     # Collect all buffered messages and clear
     async with _lock:

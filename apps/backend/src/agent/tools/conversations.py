@@ -60,13 +60,23 @@ def _search_sync(patient_id: str, query: str) -> dict[str, Any]:
 
 
 async def search_past_conversations(
-    patient_id: str, query: str
+    patient_id: str,
+    query: str,
+    *,
+    session_id: str,
 ) -> dict[str, Any]:
     """Search past conversation history for a specific patient.
 
     ChromaDB calls are synchronous — wrapped in ``asyncio.to_thread``
     to avoid blocking the FastAPI event loop.
     """
+    # Verify patient_id matches the session's identified patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    if session_patient and session_patient != patient_id:
+        return {"error": "Cannot search conversations for a different patient."}
+
     try:
         return await asyncio.to_thread(_search_sync, patient_id, query)
     except Exception:

@@ -7,9 +7,20 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# .env lives at the project root: Take_Home_Dentist/.env
-# config.py is at apps/backend/src/config.py → parents: src(0) → backend(1) → apps(2) → root(3)
-_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+# Find .env by walking up from config.py until we find it (works in both
+# local dev: apps/backend/src/config.py → root/.env  and
+# Docker: /app/src/config.py → /app/.env or env vars only)
+def _find_env_file() -> str:
+    p = Path(__file__).resolve().parent
+    for _ in range(6):  # up to 6 levels
+        candidate = p / ".env"
+        if candidate.is_file():
+            return str(candidate)
+        p = p.parent
+    return ".env"  # fallback — pydantic-settings will just use OS env vars
+
+
+_ENV_FILE = _find_env_file()
 
 
 class Settings(BaseSettings):

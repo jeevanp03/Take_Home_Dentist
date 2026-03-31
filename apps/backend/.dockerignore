@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+data/dental.db
+data/chroma/
+data/knowledge/cache/
+.env
+.pytest_cache/
+tests/

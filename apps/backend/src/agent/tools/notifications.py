@@ -41,7 +41,8 @@ async def notify_staff(
         "status": "sent",
         "type": type,
         "message": f"Staff has been notified about this {type}.",
-        "details": message,
+        # PHI NOTE: Do not echo the message content back — it may contain
+        # clinical details that would be re-sent to the LLM on every turn.
     }
 
 
