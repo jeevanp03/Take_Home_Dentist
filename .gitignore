@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Database
+apps/backend/data/dental.db
+
+# ChromaDB persistent storage
+apps/backend/data/chroma/
+
+# Knowledge cache (API pulls)
+apps/backend/data/knowledge/cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs
+*.log
+
+# Next.js generated types
+apps/frontend/.next-env.d.ts
+
+learnings
+skills-lock.json
