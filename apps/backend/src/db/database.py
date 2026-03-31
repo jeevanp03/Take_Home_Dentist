@@ -73,5 +73,14 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
+
+
+def dispose_engine() -> None:
+    """Cleanly dispose the engine's connection pool (call on shutdown)."""
+    engine.dispose()
+    logger.info("Database engine disposed.")

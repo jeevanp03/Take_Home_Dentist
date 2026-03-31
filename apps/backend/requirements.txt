@@ -2,7 +2,7 @@ fastapi>=0.110
 uvicorn[standard]
 sqlalchemy>=2.0
 pydantic-settings
-google-generativeai
+google-genai
 chromadb
 redis[hiredis]
 python-jose[cryptography]

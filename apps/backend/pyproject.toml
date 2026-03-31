@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: tests that hit live external APIs (Gemini, etc.)",
+]
+# By default, skip integration tests — run them explicitly with: pytest -m integration
+addopts = "-m 'not integration'"
+filterwarnings = [
+    "ignore::DeprecationWarning:google.*",
+]

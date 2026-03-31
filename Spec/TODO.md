@@ -170,26 +170,25 @@
 
 ## Phase 2A: Gemini 2.0 Flash LLM Client (~45 min)
 
-- [ ] **2A.1** Create Gemini LLM client (`src/agent/llm.py`)
-  - Configure `google.generativeai` with API key
+- [x] **2A.1** Create Gemini LLM client (`src/agent/llm.py`)
+  - Migrated to `google-genai` SDK (client-based API, replaces deprecated `google-generativeai`)
   - Model: `gemini-2.0-flash`
-  - `GenerationConfig(temperature=0.4, top_p=0.9, max_output_tokens=1024)`
-  - **Safety settings**: `BLOCK_ONLY_HIGH` for `HARM_CATEGORY_DANGEROUS_CONTENT` and medical categories — dental content ("bleeding gums", "extraction pain") will trigger false positives at default thresholds
+  - `build_config()` merges generation params, safety, tools, system_instruction into `GenerateContentConfig`
+  - **Safety settings**: `BLOCK_ONLY_HIGH` for all harm categories — dental content safe
   - `asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)` wrapping all calls
-  - `call_gemini(messages, tools, stream=True)` async function
-  - Retry with exponential backoff (max 2 retries) on 429/500
-  - Note: Gemini free tier is 15 RPM — semaphore + backoff must handle this
+  - `call_gemini()` and `call_gemini_stream()` async functions
+  - Retry with exponential backoff (max 2 retries) on 429/500/503
 
-- [ ] **2A.2** Create message format converter (`src/agent/message_converter.py`)
-  - Convert Redis `{role, content}` dicts → Gemini `Content(parts=[Part(...)])` objects
+- [x] **2A.2** Create message format converter (`src/agent/message_converter.py`)
+  - Convert Redis `{role, content}` dicts ↔ `google.genai.types.Content/Part` objects
   - Handle all message types: user text, assistant text, function_call turns, function_response turns
-  - This is non-trivial — Gemini's proto format requires specific `Part` types for tool interactions
+  - Consecutive same-role merging (required for Gemini's strict alternation)
+  - `Part.from_function_call()` / `Part.from_function_response()` (no more raw protobuf Struct)
 
-- [ ] **2A.3** Test: completion + function call round-trip
-  - Simple message → text response
-  - Message triggering tool → verify `response.candidates[0].content.parts` parsing
-  - Verify multiple function_calls in single response (Gemini supports parallel tool calling)
-  - Verify safety settings don't block dental content
+- [x] **2A.3** Test: completion + function call round-trip
+  - 13 unit tests covering booking flow, emergency flow, parallel tool calls, edge cases
+  - 3 integration tests (live API): dental safety, tool round-trip, error handling
+  - Integration tests gated behind `@pytest.mark.integration` (Gemini free tier quota-limited)
 
 ---
 
@@ -314,7 +313,7 @@
 
 ---
 
-## Phase 3A: JWT Authentication (~30 min)
+## Phase 3A: JWT Authentication + Patient Identification (~45 min)
 
 - [ ] **3A.1** Create JWT auth helpers (`src/api/auth.py`)
   - `TokenData`, `TokenResponse` models
@@ -322,12 +321,21 @@
   - `verify_token()` → FastAPI Depends, raises 401 with `WWW-Authenticate: Bearer`
 
 - [ ] **3A.2** Create auth routes (`src/api/auth_routes.py`)
-  - `POST /api/auth/token` — issue JWT, no auth required
+  - `POST /api/auth/token` — issue JWT (session_id in claims), no auth required
   - `POST /api/auth/refresh` — refresh, requires valid JWT
   - Register in `main.py`
 
-- [ ] **3A.3** Protect routes with JWT
-  - `POST /api/chat` and `GET /api/slots` use `Depends(verify_token)`
+- [ ] **3A.3** Create patient identification endpoint (`src/api/routes.py`)
+  - `POST /api/identify` — called by frontend after the welcome screen choice
+  - Request body: `{ mode: "returning" | "new" | "question", name?: str, phone?: str }`
+  - **Returning**: lookup patient by name + phone → if found, load patient record + upcoming appointments + past conversation summaries → inject all into Redis session → return patient context to frontend
+  - **New**: check for existing (prevent duplicates) → if not found, create patient with name + phone → inject patient_id into session → return. Agent will conversationally collect DOB + insurance
+  - **Question**: no lookup needed, just create session → return. Agent handles everything
+  - Requires valid JWT (session_id from claims)
+  - Returns: `{ patient_id?, patient_name?, upcoming_appointments[], needs_info: ["dob", "insurance"] }`
+
+- [ ] **3A.4** Protect routes with JWT
+  - `POST /api/chat`, `POST /api/identify`, `GET /api/slots` use `Depends(verify_token)`
   - Session_id from JWT claims, not request body
 
 ---
@@ -381,16 +389,27 @@
 
 - [ ] **4.1** Create API client layer (`src/lib/api.ts`)
   - `getToken()` — POST `/api/auth/token`, cache in memory (not localStorage), schedule refresh at 50 min
+  - `identifyPatient(mode, name?, phone?)` — POST `/api/identify` with Bearer token
   - `sendMessage(message)` — POST `/api/chat` with Bearer token
   - SSE reader: parse `data:` lines from ReadableStream, yield chunks
   - Handle 401 → auto-refresh and retry once
   - Handle network errors → error state
 
-- [ ] **4.2** Build `ChatWindow` component
+- [ ] **4.2** Build `WelcomeScreen` component (pre-agent identification)
+  - Three choices: "I'm a new patient" / "I've been here before" / "Just have a question"
+  - **New/Returning**: shows a minimal name + phone form (2 fields)
+  - **Returning**: calls `POST /api/identify { mode: "returning" }` → if patient found, transitions to chat with context; if not found, offers "Would you like to register as a new patient?"
+  - **New**: calls `POST /api/identify { mode: "new" }` → creates patient, transitions to chat (agent collects DOB + insurance conversationally)
+  - **Question**: calls `POST /api/identify { mode: "question" }` → goes straight to chat, no form
+  - Clean, warm design matching Mia persona — not a clinical form
+  - **ARIA live region** for screen reader announcements on state changes
+  - **"Start over" link** to return to welcome screen from chat
+
+- [ ] **4.3** Build `ChatWindow` component
   - Message state management, SSE stream consumption
   - Auto-scroll (doesn't hijack if user scrolled up)
-  - Welcome message on first load: "Hi! I'm Mia, your dental assistant at Bright Smile Dental. I can help you book, reschedule, or cancel appointments, answer dental questions, or handle emergencies. What can I help you with today?"
-  - **"New Chat" button** in header — clears conversation, starts fresh session
+  - **Context-aware first message**: if returning patient, Mia greets by name with upcoming appointments; if new patient, Mia asks for DOB/insurance; if question-only, Mia offers help
+  - **"New Chat" button** in header — clears conversation, returns to welcome screen
   - Session ID in localStorage
   - **Session timeout warning**: when backend signals TTL < 5 min, show inline warning "This session will reset soon — are you still there?"
   - **ARIA live region** on message list for screen reader announcements

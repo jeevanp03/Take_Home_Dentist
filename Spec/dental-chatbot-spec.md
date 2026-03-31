@@ -521,12 +521,22 @@ PERSONALITY:
 - If you don't know something clinical, say so — don't guess about dental advice.
 
 CORE WORKFLOW:
-1. Greet naturally. Determine what the patient needs.
-2. If booking: determine if new or existing patient.
-   - New: collect full name, phone, DOB, insurance (or self-pay). Then find a slot.
-   - Existing: verify identity (name + phone OR name + DOB). Then handle their request.
-3. For scheduling: ask about preferred dates/times, use tools to find availability.
-4. Confirm all details before finalizing any booking.
+Patient identification happens BEFORE you start — the frontend collects name + phone
+and injects patient context into your session. You will receive one of three modes:
+
+1. RETURNING PATIENT: You already know their name, patient_id, upcoming appointments,
+   and past conversation context. Greet them by name, reference their appointments,
+   and ask how you can help. Do NOT ask for name/phone — you already have it.
+
+2. NEW PATIENT: You know their name and phone (from the form). You need to
+   conversationally collect DOB and insurance status, then help them book.
+   Ask one question at a time — DOB first, then insurance.
+
+3. QUESTION ONLY: No patient identified. Answer their question from the knowledge
+   base. If they decide to book, collect name + phone first (the form was skipped).
+
+For scheduling: ask about preferred dates/times, use tools to find availability.
+Confirm all details before finalizing any booking.
 
 KNOWLEDGE BASE:
 Your knowledge base contains three types of information:
@@ -575,45 +585,95 @@ Today is {date}, {day_of_week}. Current time: {time}.
 | `get_patient_appointments` | `patient_id` | List of upcoming appointments | After identifying existing patient |
 | `notify_staff` | `type, message, patient_id?` | Confirmation | Emergency triage, special requests, anything needing human follow-up |
 
-### 3.3 Conversation State Machine
+### 3.3 Pre-Agent Identification Flow (Frontend-Driven)
+
+Patient identification is deterministic — it doesn't benefit from LLM reasoning. The frontend handles it with a structured UI before the agent starts, so the agent begins every conversation with full patient context.
 
 ```
-                    ┌──────────┐
-                    │  START   │
-                    └────┬─────┘
-                         │
-                    ┌────▼─────┐
-              ┌─────│  GREET   │─────┐
-              │     └────┬─────┘     │
-              │          │           │
-         ┌────▼───┐ ┌───▼────┐ ┌───▼──────┐
-         │  NEW   │ │EXISTING│ │ INQUIRY  │
-         │PATIENT │ │PATIENT │ │(no auth) │
-         └───┬────┘ └───┬────┘ └───┬──────┘
-             │          │          │
-        ┌────▼────┐ ┌───▼───┐     │ answer from KB
-        │COLLECT  │ │VERIFY │     │ (practice / PubMed
-        │ INFO    │ │IDENTITY│    │  / MedlinePlus)
-        │name,    │ └───┬───┘     │
-        │phone,   │     │         │
-        │dob,     │ ┌───▼────┐   │
-        │insurance│ │PATIENT │   │
-        └───┬─────┘ │ MENU   │   │
-            │       │book/   │   │
-            │       │resched/│   │
-            │       │cancel  │   │
-            │       └───┬────┘   │
-            │           │        │
-       ┌────▼───────────▼────┐   │
-       │   SCHEDULING FLOW   │   │
-       │  find slot → confirm│   │
-       │  → book → done      │   │
-       └─────────┬───────────┘   │
-                 │               │
-            ┌────▼───────────────▼──┐
-            │     WRAP UP           │
-            │  "Anything else?"     │
-            └───────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  WELCOME SCREEN (frontend, no LLM involved)                  │
+│                                                              │
+│  "Hi! I'm Mia from Bright Smile Dental."                    │
+│                                                              │
+│  ┌──────────────────┐  ┌─────────────────────┐             │
+│  │ I'm a new        │  │ I've been here      │             │
+│  │ patient          │  │ before              │             │
+│  └──────────────────┘  └─────────────────────┘             │
+│                                                              │
+│  ┌────────────────────────────────────────────┐             │
+│  │ Just have a question                       │             │
+│  └────────────────────────────────────────────┘             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Path A — Returning Patient:**
+1. Frontend shows name + phone form (2 fields)
+2. `POST /api/identify` → backend looks up patient via `PatientRepository`
+3. If found: backend loads patient record + upcoming appointments + past conversation summary
+4. All injected into Redis session (`patient_id`, `patient_context`)
+5. Agent starts with full context — first message is personal: "Welcome back, Sarah! I see you have a cleaning on April 7th. How can I help?"
+6. Agent never needs to call `lookup_patient` — it already knows
+
+**Path B — New Patient:**
+1. Frontend shows name + phone form (2 fields, same as returning)
+2. `POST /api/identify` → backend checks for existing patient (prevent duplicates)
+3. If not found: backend creates patient with name + phone, session gets `patient_id`
+4. Agent starts knowing name + phone, conversationally collects DOB + insurance
+5. Agent calls `update_patient` tool to add DOB/insurance once collected
+6. This keeps the form minimal (2 fields) while letting the agent do the conversational parts (DOB, insurance discussion, booking)
+
+**Path C — Just a Question:**
+1. No identification needed — skip straight to agent
+2. Agent answers from knowledge base (hours, insurance accepted, procedures)
+3. If patient decides to book mid-conversation, agent transitions to collecting info
+
+**Why this split:**
+- Patient lookup is a database query, not a reasoning task — LLM adds latency and unpredictability for zero benefit
+- The agent starts with rich context (appointments, history) instead of spending 3-4 turns collecting name/phone
+- "Just a question" path showcases RAG without forcing identification
+- A real dental receptionist asks "Have you been here before?" as their first question — this mirrors that
+
+### 3.4 Conversation State Machine (Post-Identification)
+
+```
+                    ┌──────────────────┐
+                    │  PRE-AGENT       │
+                    │  (frontend form) │
+                    │  new/returning/  │
+                    │  question        │
+                    └────────┬─────────┘
+                             │ patient_id + context
+                             │ injected into session
+                    ┌────────▼─────────┐
+              ┌─────│  AGENT START     │─────┐
+              │     │  (with context)  │     │
+              │     └────────┬─────────┘     │
+              │              │               │
+         ┌────▼───┐    ┌────▼────┐    ┌─────▼─────┐
+         │  NEW   │    │RETURNING│    │  INQUIRY  │
+         │PATIENT │    │ PATIENT │    │ (no auth) │
+         │collect │    │ ready   │    │           │
+         │DOB +   │    │ to help │    │ KB search │
+         │insuranc│    └────┬────┘    └─────┬─────┘
+         └───┬────┘         │               │
+             │         ┌────▼────┐          │
+             │         │ PATIENT │          │
+             │         │  MENU   │          │
+             │         │ book/   │          │
+             │         │ resched/│          │
+             │         │ cancel  │          │
+             │         └────┬────┘          │
+             │              │               │
+        ┌────▼──────────────▼────┐          │
+        │   SCHEDULING FLOW      │          │
+        │  find slot → confirm   │          │
+        │  → book → done         │          │
+        └──────────┬─────────────┘          │
+                   │                        │
+              ┌────▼────────────────────────▼──┐
+              │          WRAP UP               │
+              │  "Anything else?"              │
+              └────────────────────────────────┘
 ```
 
 ### 3.4 Date/Time Parsing

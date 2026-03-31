@@ -16,6 +16,7 @@ from sqlalchemy import (
     Text,
     Time,
     Boolean,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import (
@@ -135,6 +136,7 @@ class Appointment(Base):
     __table_args__ = (
         Index("ix_appointments_patient_id", "patient_id"),
         Index("ix_appointments_status", "status"),
+        UniqueConstraint("slot_id", name="uq_appointments_slot_id"),
     )
 
     id: Mapped[str] = mapped_column(

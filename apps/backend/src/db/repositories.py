@@ -8,8 +8,9 @@ second failure.
 
 from __future__ import annotations
 
+import functools
 import logging
-from datetime import date, time
+from datetime import date, datetime, time
 from typing import Literal
 
 from sqlalchemy import select, and_
@@ -20,6 +21,7 @@ from src.db.models import (
     Appointment,
     AppointmentStatus,
     AppointmentType,
+    ConversationLog,
     Patient,
     TimeSlot,
 )
@@ -31,9 +33,18 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _escape_like(value: str) -> str:
+    """Escape LIKE metacharacters so user input can't wildcard-match all rows.
+
+    ``%`` and ``_`` are the two special characters in SQL LIKE patterns.
+    """
+    return value.replace("%", r"\%").replace("_", r"\_")
+
+
 def _retry_on_integrity(fn):
     """Decorator: catch IntegrityError, retry once, then return error dict."""
 
+    @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         for attempt in range(2):
             try:
@@ -69,12 +80,17 @@ class PatientRepository:
     """CRUD operations for the patients table."""
 
     @staticmethod
+    def find_by_id(db: Session, patient_id: str) -> Patient | None:
+        return db.get(Patient, patient_id)
+
+    @staticmethod
     def find_by_name_and_phone(
         db: Session, full_name: str, phone: str
     ) -> Patient | None:
+        escaped = _escape_like(full_name)
         stmt = select(Patient).where(
             and_(
-                Patient.full_name.ilike(f"%{full_name}%"),
+                Patient.full_name.ilike(f"%{escaped}%", escape="\\"),
                 Patient.phone == phone,
             )
         )
@@ -84,13 +100,15 @@ class PatientRepository:
     def find_by_name_and_dob(
         db: Session, full_name: str, date_of_birth: date
     ) -> Patient | None:
+        escaped = _escape_like(full_name)
         stmt = select(Patient).where(
             and_(
-                Patient.full_name.ilike(f"%{full_name}%"),
+                Patient.full_name.ilike(f"%{escaped}%", escape="\\"),
                 Patient.date_of_birth == date_of_birth,
             )
         )
-        return db.execute(stmt).scalar_one_or_none()
+        # Use .first() — name+dob is not unique, so multiple matches possible
+        return db.execute(stmt).scalars().first()
 
     @staticmethod
     def find_by_phone(db: Session, phone: str) -> Patient | None:
@@ -164,11 +182,6 @@ class SlotRepository:
         groups: list[list[TimeSlot]] = []
         for i in range(len(slots) - count + 1):
             group = slots[i : i + count]
-            # Ensure all slots are on the same date
-            same_date = all(s.date == group[0].date for s in group)
-            if not same_date:
-                continue
-            # Check that each slot's end_time equals the next slot's start_time
             is_consecutive = all(
                 group[j].end_time == group[j + 1].start_time
                 for j in range(len(group) - 1)
@@ -188,6 +201,10 @@ class SlotRepository:
 
 class AppointmentRepository:
     """Transactional operations for appointments."""
+
+    @staticmethod
+    def find_by_id(db: Session, appointment_id: str) -> Appointment | None:
+        return db.get(Appointment, appointment_id)
 
     @staticmethod
     @_retry_on_integrity
@@ -228,8 +245,11 @@ class AppointmentRepository:
         appt = db.get(Appointment, appointment_id)
         if appt is None:
             return {"error": f"Appointment {appointment_id} not found."}
-        if appt.status == AppointmentStatus.cancelled:
-            return {"error": "Appointment is already cancelled."}
+        if appt.status != AppointmentStatus.scheduled:
+            return {
+                "error": f"Only scheduled appointments can be cancelled "
+                         f"(current status: {appt.status.value})."
+            }
 
         appt.status = AppointmentStatus.cancelled
         slot = db.get(TimeSlot, appt.slot_id)
@@ -289,5 +309,73 @@ class AppointmentRepository:
             select(Appointment)
             .where(and_(*conditions))
             .order_by(Appointment.created_at.desc())
+        )
+        return list(db.execute(stmt).scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# ConversationLogRepository
+# ---------------------------------------------------------------------------
+
+class ConversationLogRepository:
+    """CRUD for conversation_logs — used when flushing Redis sessions."""
+
+    @staticmethod
+    def create(
+        db: Session,
+        *,
+        session_id: str,
+        messages: str,
+        patient_id: str | None = None,
+        summary: str | None = None,
+    ) -> ConversationLog:
+        log = ConversationLog(
+            session_id=session_id,
+            patient_id=patient_id,
+            messages=messages,
+            summary=summary,
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+        logger.info("Created conversation log for session %s", session_id)
+        return log
+
+    @staticmethod
+    def end_conversation(
+        db: Session,
+        session_id: str,
+        summary: str | None = None,
+    ) -> ConversationLog | None:
+        """Mark a conversation as ended and optionally add a summary."""
+        stmt = select(ConversationLog).where(
+            ConversationLog.session_id == session_id
+        )
+        log = db.execute(stmt).scalars().first()
+        if log is None:
+            return None
+        log.ended_at = datetime.utcnow()
+        if summary is not None:
+            log.summary = summary
+        db.commit()
+        db.refresh(log)
+        return log
+
+    @staticmethod
+    def find_by_session(db: Session, session_id: str) -> ConversationLog | None:
+        stmt = select(ConversationLog).where(
+            ConversationLog.session_id == session_id
+        )
+        return db.execute(stmt).scalars().first()
+
+    @staticmethod
+    def find_by_patient(
+        db: Session, patient_id: str, limit: int = 10
+    ) -> list[ConversationLog]:
+        stmt = (
+            select(ConversationLog)
+            .where(ConversationLog.patient_id == patient_id)
+            .order_by(ConversationLog.created_at.desc())
+            .limit(limit)
         )
         return list(db.execute(stmt).scalars().all())

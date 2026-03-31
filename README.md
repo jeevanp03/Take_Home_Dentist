@@ -11,7 +11,7 @@ An agentic AI assistant that handles patient intake, appointment booking/resched
 | Database | SQLite (dev) / Postgres (prod) via SQLAlchemy 2.0 |
 | Vector DB | ChromaDB embedded (PersistentClient, in-process) |
 | Cache | Redis 7 for conversation state (30-min TTL) |
-| LLM | Gemini 2.0 Flash via google-generativeai SDK |
+| LLM | Gemini 2.0 Flash via google-genai SDK |
 | Agent | ReAct loop with 11 tools |
 
 ## Setup
@@ -126,8 +126,9 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 
 ### Key Components
 
+- **Pre-Agent Flow**: Frontend handles patient identification (new/returning/question) with a minimal name+phone form before the agent starts. The agent begins every conversation with full patient context already loaded — no LLM tokens wasted on identification.
 - **Agent Pattern**: ReAct loop (not a rigid chain) — handles unpredictable conversation pivots. Max 5 tool-calling iterations per turn. Session-level mutex prevents concurrent runs for same session.
-- **LLM**: Gemini 2.0 Flash via `google-generativeai` SDK. `temperature=0.4`, `top_p=0.9`. Safety settings: `BLOCK_ONLY_HIGH` for medical content.
+- **LLM**: Gemini 2.0 Flash via `google-genai` SDK. `temperature=0.4`, `top_p=0.9`. Safety settings: `BLOCK_ONLY_HIGH` for medical content.
 - **Database**: SQLite with WAL mode for concurrent reads (dev). Postgres-ready for prod via SQLAlchemy 2.0.
 - **Vector DB**: ChromaDB in-process with `PersistentClient`. Two collections: `dental_kb` (knowledge) and `conversations` (past chats). Uses default `all-MiniLM-L6-v2` embeddings (384 dims, runs locally, no API calls).
 - **Cache**: Redis for hot conversation state (messages, intent, booking state) with 30-min TTL. In-memory dict fallback if Redis unavailable.
@@ -152,6 +153,7 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 
 ### Design Decisions
 
+- **Deterministic before non-deterministic** — patient identification (form) happens before the LLM agent starts, so the agent always has full context from turn 1
 - **Decoupled frontend/backend** — either can be swapped independently via HTTP + SSE
 - **ChromaDB in-process** — no separate server needed; adequate for ~400 dental docs
 - **Redis as buffer, not source of truth** — conversations flush to ChromaDB + SQLite on session end

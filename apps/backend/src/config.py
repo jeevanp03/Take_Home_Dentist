@@ -37,10 +37,10 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
 
     # --- Concurrency ---
-    MAX_CONCURRENT_LLM_CALLS: int
+    MAX_CONCURRENT_LLM_CALLS: int = 10
 
     # --- Debug ---
-    DEBUG: bool
+    DEBUG: bool = False
 
 
 @lru_cache(maxsize=1)

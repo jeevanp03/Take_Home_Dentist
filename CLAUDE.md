@@ -8,12 +8,12 @@ Dental practice chatbot — an agentic AI assistant that handles patient intake,
 
 ## Architecture
 
-- **Frontend**: Next.js 15 (App Router) on port 3000 — chat UI only, no business logic
+- **Frontend**: Next.js 15 (App Router) on port 3000 — welcome screen (patient identification) + chat UI, no business logic
 - **Backend**: FastAPI + Uvicorn (Python 3.11+) on port 8000 — all orchestration, tools, and data access
 - **Database**: SQLite (dev) / Postgres (prod) via SQLAlchemy 2.0 (`mapped_column()` style, not legacy 1.x)
 - **Vector DB**: ChromaDB embedded (`PersistentClient`, in-process) — two collections: `dental_kb` (knowledge) and `conversations` (past chats), persisted to `./data/chroma/`. Uses ChromaDB's default `all-MiniLM-L6-v2` embeddings (384 dims, runs locally, no API calls/credits).
 - **Cache**: Redis for hot conversation state (messages, intent, booking state) with 30-min TTL. In-memory dict fallback if Redis unavailable.
-- **LLM**: Gemini 2.0 Flash via `google-generativeai` SDK. `temperature=0.4`, `top_p=0.9`. Safety settings: `BLOCK_ONLY_HIGH` for medical content.
+- **LLM**: Gemini 2.0 Flash via `google-genai` SDK (new client-based API, replaces deprecated `google-generativeai`). `temperature=0.4`, `top_p=0.9`. Safety settings: `BLOCK_ONLY_HIGH` for medical content.
 - **Agent pattern**: ReAct loop with tools (not a rigid chain) — handles unpredictable conversation pivots. Max 5 tool-calling iterations per turn. Session-level mutex prevents concurrent runs for same session.
 - **Auth**: Stateless JWT tokens (HS256 via python-jose), 1hr expiry, auto-refresh at 50 min.
 
@@ -33,6 +33,7 @@ The chatbot must NEVER make up information. If it doesn't know the answer or the
 - Embeddings use ChromaDB's default `all-MiniLM-L6-v2` — runs locally, no API calls, no rate limits, no credits. For ~400 dental docs this is more than adequate
 - Source-weighted retrieval: practice docs prioritized over PubMed for office-specific questions
 - Retrieval uses top-5 from ChromaDB → MMR for diversity → return top-3 with similarity threshold (reject cosine distance > 0.5)
+- **Pre-agent identification flow**: frontend handles patient identification (new/returning/question) with a minimal form (name + phone) before the agent starts. The agent begins every conversation with full patient context (record, appointments, history) already in session — no LLM tokens wasted on "What's your name?" back-and-forth. Returning patients get a personal greeting with upcoming appointments. New patients only need to provide DOB + insurance conversationally. Question-only users skip identification entirely.
 
 ## Data Models (SQLAlchemy)
 
@@ -124,16 +125,6 @@ The ReAct agent exposes these 11 tools to the LLM:
 
 Tools that modify session state (lookup_patient, create_patient, book_appointment) write back to Redis session (patient_id, booking_state) after execution.
 
-## Gemini Configuration
-
-- Model: `gemini-2.0-flash`
-- `GenerationConfig(temperature=0.4, top_p=0.9, max_output_tokens=1024)`
-- Safety settings: `BLOCK_ONLY_HIGH` for `HARM_CATEGORY_DANGEROUS_CONTENT` to avoid false positives on dental content
-- Semaphore: `asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)` wrapping all API calls
-- Retry: exponential backoff, max 2 retries on 429/500
-- Tool declarations use `genai.types.FunctionDeclaration` / `genai.types.Tool` format (not raw JSON dicts)
-- Function results sent back as `Part(function_response=FunctionResponse(name=..., response=...))` proto format
-
 ## System Prompt Key Rules
 
 - Persona: Mia, warm and professional dental assistant for Bright Smile Dental
@@ -148,6 +139,24 @@ Tools that modify session state (lookup_patient, create_patient, book_appointmen
 - Never share one patient's info with another
 - If knowledge base has no relevant result, say "I'll need to check" instead of fabricating
 
+## Development Environment
+
+- **Always use the project venv**: `.venv/bin/python`, `.venv/bin/pip`, `.venv/bin/pytest` — never use system Python
+- Run from `apps/backend/`: `.venv/bin/python -m pytest tests/ -v`
+- Integration tests (live API): `.venv/bin/python -m pytest tests/ -m integration -v -s`
+- Unit tests only (default): `.venv/bin/python -m pytest tests/ -v`
+
+## Gemini Configuration
+
+- Model: `gemini-2.0-flash`
+- SDK: `google-genai` (client-based, not the deprecated `google-generativeai`)
+- Client pattern: `genai.Client(api_key=...)` → `client.aio.models.generate_content()`
+- Config: `types.GenerateContentConfig` merges generation params, safety, tools, system_instruction
+- Parts: `types.Part.from_text()`, `types.Part.from_function_call()`, `types.Part.from_function_response()`
+- Tool declarations: `types.FunctionDeclaration` + `types.Schema` (not raw JSON or proto)
+- Semaphore: `asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)` wrapping all API calls
+- Retry: exponential backoff, max 2 retries on 429/500
+
 ## Learning
 
-It is important that after every pass you write in a separate file each time what you have learned to better inform next prompting work. Almost like you are learning as you go along, getting better.
+It is important that after every pass you write in a separate file each time what you have learned to better inform next prompting work. Almost like you are learning as you go along, getting better. Learnings go in `/learnings/` directory.
