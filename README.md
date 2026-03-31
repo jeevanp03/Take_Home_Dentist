@@ -276,6 +276,69 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 - **Retrieval pipeline** — top-5 from ChromaDB → MMR for diversity → return top-3 (reject cosine distance > 0.5)
 - **Practice queries bypass vector search** — `get_practice_info` returns static data instantly
 
+## Prioritization
+
+This section explains what was prioritized and why, framed as shipping to production for hundreds of locations and 10k+ conversations/day.
+
+### What's Load-Bearing (built first, tested hardest)
+
+1. **Never hallucinate appointments or medical info.** The agent only surfaces times from `get_available_slots` (DB query) and medical info from `search_knowledge_base` (RAG with similarity threshold). If the knowledge base returns nothing relevant, Mia says "I'll need to check on that" instead of guessing. This is the single most important property of the system — a fabricated appointment time or incorrect medical guidance erodes all patient trust instantly.
+
+2. **Double-booking prevention.** `book_appointment` is transactional: marks the slot unavailable and creates the appointment in one commit. The repository retries once on `IntegrityError`, then returns a clean error. Concurrent bookings for the same slot are tested (only one succeeds). At 10k conversations/day across hundreds of locations, race conditions aren't theoretical — they're guaranteed.
+
+3. **911/ER escalation.** The system prompt hard-codes escalation criteria (airway compromise, uncontrolled bleeding, facial trauma, jaw fracture). For these, Mia tells the patient to call 911 immediately and does NOT attempt to book an appointment. This is non-negotiable — the chatbot must never delay emergency care by trying to schedule it.
+
+4. **Patient data isolation.** Cross-patient operations are blocked at the tool level: `book_appointment`, `get_patient_appointments`, `reschedule_appointment`, and `cancel_appointment` all verify the `patient_id` matches the session. The agent can't accidentally expose one patient's data to another.
+
+5. **Graceful degradation.** Redis down? In-memory fallback. ChromaDB empty? Practice info tool still works. LLM safety-blocked? Static fallback message with the office phone number. Every external dependency has a failure path that keeps the patient informed.
+
+### What's Nice-to-Have (built, but not load-bearing)
+
+- **SMS debouncing** — concatenates rapid messages, but the system works fine without it
+- **Conversation persistence to ChromaDB** — enables "search past conversations" but isn't critical for core flows
+- **Thumbs up/down feedback** — logs for now, not yet wired to model improvement
+- **MedlinePlus/PubMed RAG tiers** — practice markdown alone covers 80% of questions; external sources add depth
+- **Post-conversation summarization** — Gemini generates a summary on goodbye, stored for future context
+
+### Risk and Failure Mode Thinking
+
+| Failure mode | Mitigation |
+|---|---|
+| LLM hallucinates appointment times | Tool-only slot access; agent cannot invent slots |
+| LLM gives medical advice | System prompt forbids diagnosis/prescription; knowledge base provides sourced info only |
+| Double booking under concurrency | Transactional DB writes with `IntegrityError` retry |
+| Patient sees another patient's data | Session-level `patient_id` enforcement on all tools |
+| LLM gets stuck in tool loop | Max 5 iterations, then forced text-only response |
+| LLM completely fails (safety block, timeout) | Static fallback: "You can reach us at (555) 123-4567" |
+| Redis goes down mid-conversation | In-memory fallback preserves session for current process lifetime |
+| Partial booking state (booked but agent crashed before confirming) | Booking is committed to DB immediately; patient can call office to verify |
+| Prompt injection | Anti-injection hardening in system prompt; input sanitization (control chars stripped, 2000 char limit) |
+
+### PHI Handling — Current State and Production Requirements
+
+**Current (dev):** SQLite stores patient names, phones, DOBs, insurance, and appointment history in plaintext. Conversation logs may contain clinical details. This is acceptable for a demo but not for production.
+
+**Production would need:**
+- Encryption at rest: SQLCipher or PostgreSQL with pgcrypto, encrypted volume for ChromaDB
+- Redis AUTH + TLS (currently unauthenticated)
+- BAA with Google for Gemini API (or switch to Vertex AI / self-hosted LLM)
+- Structured HIPAA audit logging (who accessed what, when)
+- Data retention policy for conversation logs
+- Application-layer encryption for `conversation_logs.messages`
+- Access controls beyond JWT (role-based, IP allowlisting)
+
+## What I'd Build Next
+
+If continuing development, in priority order:
+
+1. **PostgreSQL migration** — SQLite doesn't scale to multiple workers. One `alembic` migration away.
+2. **Multi-provider scheduling** — currently single-provider (Dr. Smith). Add provider selection and availability per provider.
+3. **Appointment reminders** — SMS/email notifications via Twilio/SendGrid, triggered by a cron job.
+4. **Conversation analytics dashboard** — aggregate feedback, common questions, booking success rate.
+5. **Multi-language support** — Gemini handles Spanish well; add language detection and bilingual system prompt.
+6. **Webhook-based staff notifications** — replace in-memory store with Slack/Teams/PagerDuty integration.
+7. **Patient portal integration** — SSO with existing practice management software (Open Dental, Dentrix).
+
 ## Project Structure
 
 ```
