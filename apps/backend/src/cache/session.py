@@ -140,10 +140,14 @@ async def get_session(session_id: str) -> dict[str, Any]:
     r = await _redis_or_none()
 
     if r is not None:
-        raw = await r.get(key)
+        # Pipeline GET + TTL into a single round-trip
+        async with r.pipeline(transaction=False) as pipe:
+            pipe.get(key)
+            pipe.ttl(key)
+            raw, ttl = await pipe.execute()
+
         if raw is not None:
             session = json.loads(raw)
-            ttl = await r.ttl(key)
             session["ttl_warning"] = 0 < ttl < TTL_WARNING_THRESHOLD
             return session
         # No existing session — create one.

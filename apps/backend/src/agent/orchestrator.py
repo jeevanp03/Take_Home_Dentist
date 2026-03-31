@@ -34,7 +34,7 @@ from typing import Any
 from google.genai import types
 from sqlalchemy.orm import Session
 
-from src.agent.llm import build_config, call_gemini, MODEL_NAME
+from src.agent.llm import build_config, call_gemini, call_gemini_stream, MODEL_NAME
 from src.agent.message_converter import (
     build_function_response_message,
     build_function_response_part,
@@ -505,7 +505,7 @@ async def run(
         if final_fc_msgs and not final_text_msgs and not final_text_already_yielded:
             logger.warning(
                 "Max iterations (%d) reached with pending tool calls. "
-                "Forcing text-only response.",
+                "Forcing text-only response (streaming).",
                 MAX_TOOL_ITERATIONS,
             )
             try:
@@ -517,21 +517,38 @@ async def run(
                 no_tool_config = build_config(
                     system_instruction=system_prompt,
                     max_output_tokens=MAX_OUTPUT_TOKENS,
-                    # No tools — forces text output
+                    # No tools — forces text output, safe to stream
                 )
-                response = await call_gemini(contents=contents, config=no_tool_config)
-                response_msgs = response_to_messages(response)
-                final_text_msgs = [m for m in response_msgs if m["role"] == "assistant"]
+                # Use streaming for the forced text-only call — reduces
+                # perceived latency since tokens arrive as they're generated.
+                full_text = []
+                async for chunk in call_gemini_stream(contents=contents, config=no_tool_config):
+                    if not chunk.candidates:
+                        continue
+                    candidate = chunk.candidates[0]
+                    if candidate.content is None or candidate.content.parts is None:
+                        continue
+                    for part in candidate.content.parts:
+                        if part.text:
+                            yield _text_chunk(part.text)
+                            full_text.append(part.text)
+                if full_text:
+                    await append_message(
+                        session_id,
+                        {"role": "assistant", "content": "".join(full_text)},
+                    )
+                    final_text_already_yielded = True
             except Exception:
-                logger.exception("Forced text-only call also failed.")
+                logger.exception("Forced text-only streaming call also failed.")
 
         # --- Step 6: Yield final text chunks ------------------------------
         yielded_any_final = False
-        for tm in final_text_msgs:
-            if tm.get("content"):
-                yield _text_chunk(tm["content"])
-                await append_message(session_id, tm)
-                yielded_any_final = True
+        if not final_text_already_yielded:
+            for tm in final_text_msgs:
+                if tm.get("content"):
+                    yield _text_chunk(tm["content"])
+                    await append_message(session_id, tm)
+                    yielded_any_final = True
 
         if not yielded_any_final and not final_text_already_yielded:
             # Nothing at all — static fallback

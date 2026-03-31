@@ -504,13 +504,10 @@ The following items were identified during full code review and have been implem
 - [ ] **CR.7** Disable or harden Redis in-memory fallback in production
 - [ ] **CR.8** Validate `REDIS_URL` requires TLS when `DEBUG=False`
 
-### Phase 3C Enhancement (do during SSE wiring)
+### Completed Enhancements
 
-- [ ] **CR.15** Use `call_gemini_stream` for the final text response (token-level streaming)
-
-### Phase 3B Enhancement (do during concurrency verification)
-
-- [ ] **CR.17** `get_session` pipeline optimization — batch Redis GET + TTL into single round-trip
+- [x] **CR.15** Token-level streaming via `call_gemini_stream` for the forced text-only fallback response
+- [x] **CR.17** `get_session` Redis pipeline optimization — GET + TTL in single round-trip
 
 ---
 
