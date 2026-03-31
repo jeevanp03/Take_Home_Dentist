@@ -12,7 +12,7 @@ Please arrive **15 minutes early** and bring:
 You will complete a health history form when you arrive (or we can email it to you in advance).
 
 ### What happens during my first visit?
-Your first visit typically includes a comprehensive exam, digital X-rays, a professional cleaning, and a discussion of any findings or treatment recommendations. The entire visit usually takes about 60 minutes.
+Your first visit typically includes a comprehensive exam, digital X-rays, a professional cleaning, and a discussion of any findings or treatment recommendations. The entire visit usually takes about **60-75 minutes** including new patient paperwork. Please arrive 15 minutes early to complete intake forms.
 
 ## X-Rays & Imaging
 
@@ -20,7 +20,7 @@ Your first visit typically includes a comprehensive exam, digital X-rays, a prof
 Yes. We use digital X-rays, which produce up to **90% less radiation** than traditional film X-rays. The amount of radiation from a full set of dental X-rays is less than what you receive from natural background sources in a single day.
 
 ### How often will I need X-rays?
-The frequency depends on your dental health history. Most patients receive bitewing X-rays once a year and a full set (panoramic or full-mouth series) every 3-5 years. Patients with active gum disease or frequent cavities may need X-rays more often.
+The frequency depends on your dental health history. Most healthy adults receive bitewing X-rays every **12-24 months** and a full set (panoramic or full-mouth series) every 3-5 years. Patients with active gum disease, frequent cavities, or other risk factors may need X-rays more often. Your dentist will recommend the right schedule for you.
 
 ## Dental Anxiety
 
@@ -29,7 +29,8 @@ We understand — you are not alone. Many of our patients experience dental anxi
 
 - **Noise-canceling headphones** to block out sounds
 - **TV during procedures** for distraction
-- **Sedation options** that we can discuss during your consultation
+- **Nitrous oxide ("laughing gas")** for mild sedation during procedures
+- **Oral sedation** for moderate relaxation (discuss with your dentist)
 - A gentle, patient-paced approach — we will go at your speed and check in with you frequently
 
 Please let us know about your anxiety when you schedule your appointment so we can plan accordingly.
@@ -37,7 +38,7 @@ Please let us know about your anxiety when you schedule your appointment so we c
 ## Scheduling & Cancellations
 
 ### What is your cancellation policy?
-We require **24 hours' notice** for cancellations or rescheduling. This allows us to offer the time slot to another patient who may need it. If you are sick and cannot provide 24 hours' notice, please call us — we offer a sick-day waiver for genuine illness.
+We require **24 hours' notice** for cancellations or rescheduling. This allows us to offer the time slot to another patient who may need it. If you are sick and cannot provide 24 hours' notice, please call us as soon as possible — we will waive the cancellation fee for illness.
 
 ### Can I book an appointment online?
 You can request an appointment through our chatbot or by calling (555) 123-4567 during office hours. We will confirm your appointment by phone or text.
@@ -45,13 +46,21 @@ You can request an appointment through our chatbot or by calling (555) 123-4567 
 ## Post-Procedure Care
 
 ### Is it normal to have discomfort after a procedure?
-Mild discomfort is normal for **24-48 hours** after most dental procedures. Over-the-counter pain relievers (ibuprofen or acetaminophen) and cold compresses are usually sufficient.
+Mild discomfort is normal for **24-48 hours** after most dental procedures. Over-the-counter pain relievers such as ibuprofen or acetaminophen (if not contraindicated — check with your pharmacist or physician if unsure) and cold compresses are usually sufficient.
 
 **Call us if:**
 - Pain worsens after day 3 instead of improving
 - You develop a fever
 - You experience persistent bleeding
 - The area becomes significantly more swollen
+
+### I had a tooth extracted — what should I watch for?
+See our extraction aftercare guidance in our procedures information. The most important thing: avoid straws, smoking, and vigorous rinsing for 24-48 hours. If pain gets worse instead of better — especially between days 2 and 5 — you may have dry socket. Call us right away.
+
+## Jaw Pain & TMJ
+
+### My jaw clicks or hurts — what should I do?
+Jaw pain, clicking, popping, or difficulty opening your mouth may be related to **TMJ (temporomandibular joint) disorders**. Common causes include teeth grinding (bruxism), stress-related jaw clenching, and bite alignment issues. We can evaluate your symptoms and may recommend a custom night guard, jaw exercises, or referral to a TMJ specialist. Please schedule a consultation so we can assess your specific situation.
 
 ## Payment & Insurance
 
@@ -68,3 +77,6 @@ Yes! Children of all ages are welcome. A parent or legal guardian must be presen
 
 ### At what age should my child first see a dentist?
 The American Dental Association recommends a child's first dental visit by their **first birthday** or within 6 months of the first tooth erupting.
+
+### Do you offer fluoride treatments and sealants for children?
+Yes! Fluoride treatments help strengthen developing teeth, and dental sealants provide a protective coating on back teeth (molars) to prevent cavities. Both are safe, effective, and commonly recommended for children and teens. Ask your dentist about the right timing for your child.

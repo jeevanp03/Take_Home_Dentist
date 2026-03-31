@@ -7,9 +7,31 @@ tool registry (``src/agent/tools/__init__.py``).
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+# ---------------------------------------------------------------------------
+# Phone normalization helper
+# ---------------------------------------------------------------------------
+
+_NON_DIGIT = re.compile(r"\D")
+
+
+def _normalize_phone(raw: str) -> str:
+    """Strip non-digit characters and validate length.
+
+    Accepts common US formats: 555-123-4567, (555) 123-4567, 555.123.4567,
+    5551234567.  Returns digits-only string.
+    """
+    digits = _NON_DIGIT.sub("", raw)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]  # strip leading country code
+    if len(digits) != 10:
+        raise ValueError(f"Phone must be 10 digits, got {len(digits)} from '{raw}'")
+    return digits
 
 
 # ---------------------------------------------------------------------------
@@ -31,15 +53,27 @@ class SearchPastConversationsInput(BaseModel):
 
 class LookupPatientInput(BaseModel):
     name: str = Field(..., description="Patient full name (partial match)")
-    phone: str | None = Field(None, description="Phone number for verification")
+    phone: str | None = Field(None, description="Phone number for verification (digits only)")
     date_of_birth: str | None = Field(None, description="Date of birth (YYYY-MM-DD) for verification")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return _normalize_phone(v)
 
 
 class CreatePatientInput(BaseModel):
     full_name: str = Field(..., description="Patient full name")
-    phone: str = Field(..., description="Phone number (unique)")
+    phone: str = Field(..., description="Phone number (unique, digits only)")
     date_of_birth: str | None = Field(None, description="Date of birth (YYYY-MM-DD)")
     insurance_name: str | None = Field(None, description="Insurance provider name, or null for self-pay")
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, v: str) -> str:
+        return _normalize_phone(v)
 
 
 class UpdatePatientInput(BaseModel):
@@ -64,6 +98,14 @@ class GetAvailableSlotsInput(BaseModel):
     time_preference: Literal["morning", "afternoon", "any"] = Field(
         "any", description="Time of day preference"
     )
+    provider_name: str | None = Field(
+        None, description="Filter by provider name (e.g. 'Dr. Sarah Smith')"
+    )
+
+
+class GetConsecutiveSlotsInput(BaseModel):
+    target_date: str = Field(..., description="Date to search (YYYY-MM-DD)")
+    count: int = Field(2, ge=2, le=5, description="Number of consecutive back-to-back slots needed (2-5)")
 
 
 class BookAppointmentInput(BaseModel):

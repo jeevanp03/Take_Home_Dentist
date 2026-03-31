@@ -81,6 +81,7 @@ async def get_available_slots(
     date_start: str,
     date_end: str,
     time_preference: str = "any",
+    provider_name: str | None = None,
     *,
     db: Session,
 ) -> dict:
@@ -99,7 +100,9 @@ async def get_available_slots(
     if start > end:
         return {"error": "date_start must be on or before date_end."}
 
-    slots = SlotRepository.get_available(db, start, end, time_pref=time_preference)
+    slots = SlotRepository.get_available(
+        db, start, end, time_pref=time_preference, provider_name=provider_name,
+    )
     total = len(slots)
     page = slots[:_PAGE_SIZE]
 
@@ -133,6 +136,19 @@ async def book_appointment(
     session_id: str,
 ) -> dict:
     """Book an appointment for a patient and update the session booking state."""
+    # Validate patient_id matches the session's identified patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    if not session_patient:
+        return {"error": "Patient must be identified before booking. Use lookup_patient or create_patient first."}
+    if session_patient != patient_id:
+        logger.warning(
+            "patient_id mismatch: session has %s but booking requested for %s",
+            session_patient, patient_id,
+        )
+        return {"error": "Cannot book for a different patient than the one identified in this session."}
+
     # Validate appointment type
     try:
         appt_type = AppointmentType(appointment_type)
@@ -176,8 +192,17 @@ async def reschedule_appointment(
     new_slot_id: str,
     *,
     db: Session,
+    session_id: str,
 ) -> dict:
     """Reschedule an existing appointment to a new time slot."""
+    # Verify appointment belongs to the session's patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    existing = AppointmentRepository.find_by_id(db, appointment_id)
+    if existing and session_patient and existing.patient_id != session_patient:
+        return {"error": "This appointment does not belong to the current patient."}
+
     result = AppointmentRepository.reschedule(db, appointment_id, new_slot_id)
 
     if isinstance(result, dict):
@@ -187,6 +212,12 @@ async def reschedule_appointment(
     appt: Appointment = result
     updated = _appointment_to_dict(appt)
 
+    # Keep booking_state consistent
+    await update_session(
+        session_id,
+        booking_state={"appointment_id": appt.id, "status": "rescheduled"},
+    )
+
     logger.info("Appointment %s rescheduled to slot %s.", appointment_id, new_slot_id)
     return {"updated_appointment": updated}
 
@@ -195,8 +226,17 @@ async def cancel_appointment(
     appointment_id: str,
     *,
     db: Session,
+    session_id: str,
 ) -> dict:
     """Cancel a scheduled appointment and free its time slot."""
+    # Verify appointment belongs to the session's patient
+    from src.cache.session import get_session
+    session = await get_session(session_id)
+    session_patient = session.get("patient_id")
+    existing = AppointmentRepository.find_by_id(db, appointment_id)
+    if existing and session_patient and existing.patient_id != session_patient:
+        return {"error": "This appointment does not belong to the current patient."}
+
     result = AppointmentRepository.cancel(db, appointment_id)
 
     if isinstance(result, dict):
@@ -205,6 +245,9 @@ async def cancel_appointment(
 
     appt: Appointment = result
 
+    # Clear booking_state so the session doesn't reference a cancelled appointment
+    await update_session(session_id, booking_state=None)
+
     logger.info("Appointment %s cancelled.", appointment_id)
     return {
         "cancelled": {
@@ -212,6 +255,48 @@ async def cancel_appointment(
             "status": appt.status.value,
         },
         "message": "Appointment has been cancelled and the time slot is now available.",
+    }
+
+
+async def get_consecutive_slots(
+    target_date: str,
+    count: int = 2,
+    *,
+    db: Session,
+) -> dict:
+    """Find groups of consecutive back-to-back slots on a given date.
+
+    Useful for family bookings or longer procedures that need multiple
+    adjacent time slots.  Pydantic validates count is 2-5 at schema level.
+    """
+    try:
+        target = date.fromisoformat(target_date)
+    except (ValueError, TypeError) as exc:
+        return {"error": f"Invalid date format. Use YYYY-MM-DD. ({exc})"}
+
+    slot_count = count
+
+    groups = SlotRepository.get_consecutive(db, target, slot_count)
+
+    if not groups:
+        return {
+            "groups": [],
+            "message": f"No groups of {slot_count} consecutive slots found on {_fmt_date(target)}.",
+        }
+
+    formatted_groups = []
+    for group in groups[:3]:  # show max 3 groups
+        formatted_groups.append({
+            "slots": [_slot_to_dict(s) for s in group],
+            "block_start": _fmt_time(group[0].start_time),
+            "block_end": _fmt_time(group[-1].end_time),
+            "provider": group[0].provider_name,
+        })
+
+    return {
+        "groups": formatted_groups,
+        "total_groups": len(groups),
+        "message": f"Found {len(groups)} block(s) of {slot_count} consecutive slots on {_fmt_date(target)}.",
     }
 
 

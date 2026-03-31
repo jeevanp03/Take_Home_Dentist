@@ -47,7 +47,7 @@ The following are not emergencies but should be addressed soon:
 **Important:** Do not attempt to replant a baby (primary/milk) tooth — this can damage the developing permanent tooth underneath. Contact us and we will advise you.
 
 ### Severe Tooth Pain
-- If not contraindicated, over-the-counter ibuprofen (400 mg for adults) may help — check with your pharmacist if you are unsure about drug interactions or allergies.
+- If not contraindicated, over-the-counter ibuprofen may help — follow package directions (typically 200-400 mg every 4-6 hours as needed, do not exceed the label's daily maximum). Check with your pharmacist if you are unsure about drug interactions or allergies.
 - Apply a cold compress to the outside of the cheek: 20 minutes on, 20 minutes off.
 - Avoid hot, cold, or sweet foods and drinks.
 - Do not place aspirin directly on the gums — this can cause a chemical burn.

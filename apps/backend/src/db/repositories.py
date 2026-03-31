@@ -158,9 +158,10 @@ class SlotRepository:
         date_start: date,
         date_end: date,
         time_pref: Literal["morning", "afternoon", "any"] = "any",
+        provider_name: str | None = None,
     ) -> list[TimeSlot]:
         """Return available slots in a date range, optionally filtered by
-        morning (before noon) or afternoon (noon onward)."""
+        morning (before noon) or afternoon (noon onward), and/or provider."""
         conditions = [
             TimeSlot.date >= date_start,
             TimeSlot.date <= date_end,
@@ -171,6 +172,13 @@ class SlotRepository:
             conditions.append(TimeSlot.start_time < time(12, 0))
         elif time_pref == "afternoon":
             conditions.append(TimeSlot.start_time >= time(12, 0))
+
+        if provider_name:
+            conditions.append(
+                TimeSlot.provider_name.ilike(
+                    f"%{_escape_like(provider_name)}%", escape="\\"
+                )
+            )
 
         stmt = (
             select(TimeSlot)
@@ -184,13 +192,14 @@ class SlotRepository:
         db: Session, target_date: date, count: int = 2
     ) -> list[list[TimeSlot]]:
         """Find groups of ``count`` consecutive available slots on
-        ``target_date`` (useful for longer appointments)."""
+        ``target_date`` with the same provider (useful for family bookings)."""
         slots = SlotRepository.get_available(db, target_date, target_date)
         groups: list[list[TimeSlot]] = []
         for i in range(len(slots) - count + 1):
             group = slots[i : i + count]
             is_consecutive = all(
                 group[j].end_time == group[j + 1].start_time
+                and group[j].provider_name == group[j + 1].provider_name
                 for j in range(len(group) - 1)
             )
             if is_consecutive:

@@ -21,6 +21,7 @@ from src.schemas import (
     CancelAppointmentInput,
     CreatePatientInput,
     GetAvailableSlotsInput,
+    GetConsecutiveSlotsInput,
     GetPatientAppointmentsInput,
     GetPracticeInfoInput,
     LookupPatientInput,
@@ -35,6 +36,7 @@ from src.agent.tools.conversations import search_past_conversations
 from src.agent.tools.patients import lookup_patient, create_patient, update_patient
 from src.agent.tools.appointments import (
     get_available_slots,
+    get_consecutive_slots,
     book_appointment,
     reschedule_appointment,
     cancel_appointment,
@@ -90,7 +92,13 @@ TOOL_REGISTRY: dict[str, _ToolEntry] = {
         "handler": get_available_slots,
         "schema": GetAvailableSlotsInput,
         "inject": ["db"],
-        "description": "Get available appointment time slots for a date range. Can filter by morning or afternoon.",
+        "description": "Get available appointment time slots for a date range. Can filter by morning/afternoon and by provider name.",
+    },
+    "get_consecutive_slots": {
+        "handler": get_consecutive_slots,
+        "schema": GetConsecutiveSlotsInput,
+        "inject": ["db"],
+        "description": "Find groups of consecutive back-to-back time slots on a given date. Use for family bookings or longer procedures.",
     },
     "book_appointment": {
         "handler": book_appointment,
@@ -101,13 +109,13 @@ TOOL_REGISTRY: dict[str, _ToolEntry] = {
     "reschedule_appointment": {
         "handler": reschedule_appointment,
         "schema": RescheduleAppointmentInput,
-        "inject": ["db"],
+        "inject": ["db", "session_id"],
         "description": "Reschedule an existing appointment to a new time slot.",
     },
     "cancel_appointment": {
         "handler": cancel_appointment,
         "schema": CancelAppointmentInput,
-        "inject": ["db"],
+        "inject": ["db", "session_id"],
         "description": "Cancel a scheduled appointment and free the time slot.",
     },
     "get_patient_appointments": {
