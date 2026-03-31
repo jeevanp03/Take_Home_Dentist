@@ -273,7 +273,7 @@
 
 ## Phase 4: Frontend Chat UI (~2 hr)
 
-- [ ] **4.1** Create API client layer (`src/lib/api.ts`)
+- [x] **4.1** Create API client layer (`src/lib/api.ts`)
   - `getToken()` — POST `/api/auth/token`, cache in memory (not localStorage), schedule refresh at 50 min
   - `identifyPatient(mode, name?, phone?)` — POST `/api/identify` with Bearer token
   - `sendMessage(message)` — POST `/api/chat` with Bearer token
@@ -281,7 +281,7 @@
   - Handle 401 → auto-refresh and retry once
   - Handle network errors → error state
 
-- [ ] **4.2** Build `WelcomeScreen` component (pre-agent identification)
+- [x] **4.2** Build `WelcomeScreen` component (pre-agent identification)
   - Three choices: "I'm a new patient" / "I've been here before" / "Just have a question"
   - **New/Returning**: shows a minimal name + phone form (2 fields)
   - **Returning**: calls `POST /api/identify { mode: "returning" }` → if patient found, transitions to chat with context; if not found, offers "Would you like to register as a new patient?"
@@ -291,7 +291,7 @@
   - **ARIA live region** for screen reader announcements on state changes
   - **"Start over" link** to return to welcome screen from chat
 
-- [ ] **4.3** Build `ChatWindow` component
+- [x] **4.3** Build `ChatWindow` component
   - Message state management, SSE stream consumption
   - Auto-scroll (doesn't hijack if user scrolled up)
   - **Context-aware first message**: if returning patient, Mia greets by name with upcoming appointments; if new patient, Mia asks for DOB/insurance; if question-only, Mia offers help
@@ -300,39 +300,39 @@
   - **Session timeout warning**: when backend signals TTL < 5 min, show inline warning "This session will reset soon — are you still there?"
   - **ARIA live region** on message list for screen reader announcements
 
-- [ ] **4.3** Build `MessageBubble` component
+- [x] **4.3** Build `MessageBubble` component
   - User (right, dark bg) vs assistant (left, light bg, "Mia" label)
   - Markdown rendering (lightweight renderer)
   - Timestamps shown subtly
   - Smooth entrance animation with **`prefers-reduced-motion` respect**
   - **Keyboard accessible**: messages focusable for screen reader navigation
 
-- [ ] **4.4** Build `ChatInput` component
+- [x] **4.4** Build `ChatInput` component
   - Enter to send, Shift+Enter for newline
   - Disabled while streaming
   - Focus on mount and after send
   - **Accessible**: proper `<label>`, `aria-label="Type your message"`, focus ring visible
   - **Min touch target 44x44px** for send button on mobile
 
-- [ ] **4.5** Build `TypingIndicator` component
+- [x] **4.5** Build `TypingIndicator` component
   - Three bouncing dots during SSE stream
   - Disappears on first text chunk
   - **`aria-live="polite"` + `aria-label="Mia is typing"`**
   - **`prefers-reduced-motion`**: static "..." instead of animation
 
-- [ ] **4.6** Build `AppointmentCard` component
+- [x] **4.6** Build `AppointmentCard` component
   - Inline card for confirmed/listed appointments
   - Shows date, time, type, provider, status
   - **Also used as pre-booking confirmation**: "Here's what I'm about to book — does this look right?" with structured summary before calling `book_appointment`
   - **Print/save button**: opens browser print dialog or copies details to clipboard
 
-- [ ] **4.7** Build `QuickReplies` component
+- [x] **4.7** Build `QuickReplies` component
   - Contextual chips on greeting: "Book an appointment", "Check my appointments", "I have a dental emergency", "Ask a question"
   - Clicking sends that text as user message
   - Disappear after any interaction
   - **Keyboard accessible**: Tab-navigable, Enter/Space to activate
 
-- [ ] **4.8** Assemble page layout and styling
+- [x] **4.8** Assemble page layout and styling
   - Full-height chat layout (header + messages + input)
   - Professional dental aesthetic: whites, calming blues/teals
   - "Bright Smile Dental" branding header
@@ -340,7 +340,7 @@
   - **WCAG 2.1 AA**: color contrast 4.5:1+, visible focus indicators on all interactive elements, logical tab order
   - **Font sizing**: min 16px body text (dental patients skew older), scalable with browser zoom
 
-- [ ] **4.9** Handle error and loading states
+- [x] **4.9** Handle error and loading states
   - Network failure: inline reconnection message + retry button
   - API error: "Something went wrong — please try again" (never technical jargon)
   - **Specific tool-execution messages**: "Checking availability..." / "Looking up your records..." (not just generic dots)
@@ -348,7 +348,7 @@
   - Empty state: welcome + quick replies
   - **Message retry**: if a specific message fails, show retry icon on that message
 
-- [ ] **4.10** Add feedback mechanism
+- [x] **4.10** Add feedback mechanism
   - Thumbs up/down on each assistant message (small, unobtrusive)
   - Optional post-conversation prompt: "How was your experience?"
   - Store feedback in backend (simple endpoint + table or log)

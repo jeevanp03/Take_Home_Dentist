@@ -1,9 +1,14 @@
 .venv/
 __pycache__/
 *.pyc
+*.pyo
 data/dental.db
 data/chroma/
 data/knowledge/cache/
 .env
 .pytest_cache/
 tests/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+learnings/

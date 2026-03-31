@@ -14,20 +14,14 @@ An agentic AI assistant that handles patient intake, appointment booking/resched
 | LLM | Gemini 2.0 Flash via google-genai SDK |
 | Agent | ReAct loop with 11 tools |
 
-## Setup
+## Quick Start (Docker Compose)
 
-### Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- Docker (for Redis)
-
-### 1. Clone and configure environment
+The fastest way to run the full stack — one command starts Redis, backend, and frontend:
 
 ```bash
+# 1. Clone and configure
 git clone <repo-url> && cd <repo>
 cp .env.example .env
-cp apps/frontend/.env.local.example apps/frontend/.env.local
 ```
 
 Edit `.env` — you only need to set two values:
@@ -37,37 +31,76 @@ Edit `.env` — you only need to set two values:
 | `GEMINI_API_KEY` | Free at [Google AI Studio](https://aistudio.google.com/apikey) — sign in, click "Create API Key" |
 | `JWT_SECRET_KEY` | Generate with: `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 
-Everything else is pre-filled with working defaults (SQLite, localhost Redis, etc.).
+```bash
+# 2. Build and start everything
+docker compose up --build
+
+# 3. In a separate terminal — seed DB + embed knowledge base
+docker compose exec backend python -m scripts.seed
+docker compose exec backend python -m scripts.embed_knowledge
+```
+
+Open **http://localhost:3000** — that's it.
+
+Docker Compose orchestrates three services with health checks:
+- **redis** starts first (healthcheck: `redis-cli ping`)
+- **backend** waits for Redis to be healthy, then starts FastAPI on port 8000 (healthcheck: `/api/health`)
+- **frontend** waits for backend to be healthy, then starts Next.js on port 3000
+
+```bash
+# Run in background
+docker compose up -d --build
+docker compose logs -f          # tail all logs
+docker compose logs -f backend  # tail backend only
+
+# Rebuild after code changes
+docker compose up --build
+
+# Stop everything
+docker compose down
+
+# Stop and remove volumes (fresh start)
+docker compose down -v
+```
+
+## Local Development Setup
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- Redis (optional — falls back to in-memory dict if unavailable)
+
+### 1. Environment
+
+```bash
+cp .env.example .env
+cp apps/frontend/.env.local.example apps/frontend/.env.local
+```
+
+Edit `.env` and set `GEMINI_API_KEY` and `JWT_SECRET_KEY` (see table above). Everything else has working defaults.
 
 > **Note:** The frontend has its own env file (`apps/frontend/.env.local`) because Next.js only reads `NEXT_PUBLIC_*` vars from its own directory. The default `NEXT_PUBLIC_API_URL=http://localhost:8000` works out of the box.
 
-### 2. Start Redis
-
-```bash
-docker-compose up -d redis
-```
-
-> The `docker-compose.yml` also defines `backend` and `frontend` services, but their Dockerfiles don't exist yet. For now, use the manual setup steps below. Running `docker-compose up -d redis` starts only Redis.
-
-### 3. Backend
+### 2. Backend
 
 ```bash
 cd apps/backend
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt   # includes requirements.txt + pytest
 
-# Seed the database with sample patients, time slots, and appointment types
+# Seed the database with sample patients, time slots, and appointments
 python -m scripts.seed
 
-# Embed practice knowledge into ChromaDB (required for RAG)
-python -m scripts.embed_knowledge --practice-only
+# Embed knowledge base into ChromaDB (see Knowledge Base section below)
+python -m scripts.embed_knowledge
 
 # Start the server
 uvicorn src.main:app --reload --port 8000
 ```
 
-### 4. Frontend
+### 3. Frontend
 
 ```bash
 cd apps/frontend
@@ -75,23 +108,114 @@ npm install
 npm run dev
 ```
 
+### 4. Redis (optional)
+
+```bash
+# Option A: via Docker
+docker run -d --name redis -p 6379:6379 redis:7-alpine
+
+# Option B: via Homebrew (macOS)
+brew install redis && brew services start redis
+```
+
+If Redis is unavailable, the backend automatically falls back to an in-memory dict. Fine for dev, but conversations won't persist across restarts.
+
 ### 5. Verify
 
 - Backend health: http://localhost:8000/api/health
 - API docs: http://localhost:8000/docs
 - Frontend: http://localhost:3000
 
-## Scripts
+## Knowledge Base Setup (Vector DB)
 
-Run from `apps/backend/` with the virtualenv activated, or via Docker:
+The chatbot's RAG pipeline uses ChromaDB with three tiers of dental knowledge:
 
-| Local (from `apps/backend/`) | Docker (from project root) | What it does |
-|------------------------------|---------------------------|-------------|
-| `python -m scripts.seed` | `docker-compose exec backend python -m scripts.seed` | Seed DB with sample data. Idempotent. |
-| `python -m scripts.embed_knowledge --practice-only` | `docker-compose exec backend python -m scripts.embed_knowledge --practice-only` | Embed local practice markdown only (fast). **Run this first.** |
-| `python -m scripts.embed_knowledge` | `docker-compose exec backend python -m scripts.embed_knowledge` | Embed all knowledge (practice + PubMed + MedlinePlus). |
-| `python -m scripts.embed_knowledge --refresh` | `docker-compose exec backend python -m scripts.embed_knowledge --refresh` | Re-embed from cached API responses. |
-| `python -m scripts.embed_knowledge --repull` | `docker-compose exec backend python -m scripts.embed_knowledge --repull` | Re-fetch APIs, update cache, re-embed. |
+| Tier | Source | Content |
+|------|--------|---------|
+| 1 — Practice | Local markdown in `data/knowledge/` | Office hours, insurance, procedures, FAQ, emergency protocol |
+| 2 — MedlinePlus | NLM API (cached) | Patient-friendly health topic summaries (19 topics) |
+| 3 — PubMed | NCBI API (cached) | Research abstracts for clinical depth (20 topics, 8 articles each) |
+
+ChromaDB uses the default `all-MiniLM-L6-v2` embedding model — runs locally, no API calls or credits needed.
+
+### Embedding Commands
+
+Run from `apps/backend/` (or via `docker compose exec backend ...`):
+
+```bash
+# Default: embed everything (uses cached API responses if available, fetches if not)
+python -m scripts.embed_knowledge
+
+# Practice markdown only (fastest — no external API calls)
+python -m scripts.embed_knowledge --practice-only
+
+# Re-embed from cache only (skip API calls)
+python -m scripts.embed_knowledge --refresh
+
+# Re-fetch everything from APIs, update cache, then re-embed
+python -m scripts.embed_knowledge --repull
+```
+
+**What the pipeline does:**
+1. Chunks practice markdown files by `##` headers
+2. Fetches PubMed abstracts (20 topics, 8 articles each, quality-filtered)
+3. Fetches MedlinePlus summaries (19 topics, with curated fallbacks)
+4. Embeds all chunks into ChromaDB's `dental_kb` collection
+5. Runs deduplication (removes chunks with cosine similarity > 0.92)
+
+API responses are cached in `data/knowledge/cache/` so subsequent runs don't re-fetch.
+
+### Docker Note
+
+The ChromaDB data directory is volume-mounted (`./apps/backend/data:/app/data`), so embeddings persist across container restarts. Embed once and you're set:
+
+```bash
+docker compose exec backend python -m scripts.embed_knowledge
+```
+
+## Scripts Reference
+
+| Command (from `apps/backend/`) | Docker equivalent | What it does |
+|-------------------------------|-------------------|-------------|
+| `python -m scripts.seed` | `docker compose exec backend python -m scripts.seed` | Seed DB with time slots, sample patients, appointments. Idempotent. |
+| `python -m scripts.embed_knowledge` | `docker compose exec backend python -m scripts.embed_knowledge` | Embed all knowledge (practice + PubMed + MedlinePlus). |
+| `python -m scripts.embed_knowledge --practice-only` | `docker compose exec backend python -m scripts.embed_knowledge --practice-only` | Embed local practice markdown only (fast, no API calls). |
+| `python -m scripts.embed_knowledge --refresh` | `docker compose exec backend python -m scripts.embed_knowledge --refresh` | Re-embed from cached API responses only. |
+| `python -m scripts.embed_knowledge --repull` | `docker compose exec backend python -m scripts.embed_knowledge --repull` | Re-fetch all APIs, update cache, re-embed. |
+
+## Testing
+
+```bash
+cd apps/backend
+
+# Unit tests (no external API calls)
+.venv/bin/python -m pytest tests/ -v
+
+# Integration tests (requires GEMINI_API_KEY)
+.venv/bin/python -m pytest tests/ -m integration -v -s
+```
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/token` | No | Get JWT token (starts session) |
+| POST | `/api/auth/refresh` | Yes | Refresh expiring token |
+| POST | `/api/identify` | Yes | Pre-agent patient identification |
+| POST | `/api/chat` | Yes | Send message, receive SSE stream |
+| GET | `/api/slots` | Yes | Query available appointment slots |
+| POST | `/api/feedback` | Yes | Submit thumbs up/down on messages |
+| GET | `/api/health` | No | Health check with service status |
+
+### SSE Stream Format
+
+`POST /api/chat` returns `text/event-stream`:
+
+```
+data: {"type": "text", "content": "Hello! I'm Mia..."}
+data: {"type": "text", "content": "Let me check that for you."}
+data: [DONE]
+```
 
 ## Architecture
 
@@ -124,17 +248,6 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
                                   └──────────────────────────────────────────┘
 ```
 
-### Key Components
-
-- **Pre-Agent Flow**: Frontend handles patient identification (new/returning/question) with a minimal name+phone form before the agent starts. The agent begins every conversation with full patient context already loaded — no LLM tokens wasted on identification.
-- **Agent Pattern**: ReAct loop (not a rigid chain) — handles unpredictable conversation pivots. Max 5 tool-calling iterations per turn. Session-level mutex prevents concurrent runs for same session.
-- **LLM**: Gemini 2.0 Flash via `google-genai` SDK. `temperature=0.4`, `top_p=0.9`. Safety settings: `BLOCK_ONLY_HIGH` for medical content.
-- **Database**: SQLite with WAL mode for concurrent reads (dev). Postgres-ready for prod via SQLAlchemy 2.0.
-- **Vector DB**: ChromaDB in-process with `PersistentClient`. Two collections: `dental_kb` (knowledge) and `conversations` (past chats). Uses default `all-MiniLM-L6-v2` embeddings (384 dims, runs locally, no API calls).
-- **Cache**: Redis for hot conversation state (messages, intent, booking state) with 30-min TTL. In-memory dict fallback if Redis unavailable.
-- **Auth**: Stateless JWT tokens (HS256), 1hr expiry, auto-refresh at 50 min.
-- **Knowledge Base**: Three tiers — hand-authored practice markdown + MedlinePlus patient summaries + PubMed research abstracts.
-
 ### Agent Tools (11)
 
 | Tool | Purpose |
@@ -151,7 +264,7 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 | `notify_staff` | Alert staff (emergencies, escalations, special requests) |
 | `get_practice_info` | Static practice details (no vector search, instant) |
 
-### Design Decisions
+### Key Design Decisions
 
 - **Deterministic before non-deterministic** — patient identification (form) happens before the LLM agent starts, so the agent always has full context from turn 1
 - **Decoupled frontend/backend** — either can be swapped independently via HTTP + SSE
@@ -163,32 +276,36 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 - **Retrieval pipeline** — top-5 from ChromaDB → MMR for diversity → return top-3 (reject cosine distance > 0.5)
 - **Practice queries bypass vector search** — `get_practice_info` returns static data instantly
 
-## Detailed Docs
-
-- **[Backend README](apps/backend/README.md)** — env vars, scripts, DB schema, knowledge base, project structure
-- **[Frontend README](apps/frontend/README.md)** — setup, commands, how it connects to the backend
-
 ## Project Structure
 
 ```
-apps/
-  backend/
-    src/
-      main.py               # FastAPI app, CORS, startup events
-      config.py              # Pydantic BaseSettings
-      db/                    # SQLAlchemy models, database setup, repositories
-      agent/                 # ReAct orchestrator, system prompt, LLM client, tools
-      vector/                # ChromaDB client and embedding helpers
-      cache/                 # Redis client with in-memory fallback
-      api/                   # Routes, JWT auth, debounce middleware
-      schemas/               # Pydantic request/response models
-    data/
-      knowledge/             # Practice-specific markdown (Tier 1)
-      chroma/                # ChromaDB persistent storage (gitignored)
-    scripts/
-      seed.py                # DB seeding
-      embed_knowledge.py     # Knowledge embedding pipeline
-    tests/                   # pytest test suite
-  frontend/
-    src/app/                 # Next.js App Router pages and components
+├── docker-compose.yml          # Full stack: Redis + Backend + Frontend
+├── .env.example                # Environment variable template
+├── apps/
+│   ├── backend/
+│   │   ├── Dockerfile          # Python 3.11-slim, pip cache mount
+│   │   ├── requirements.txt
+│   │   ├── src/
+│   │   │   ├── main.py         # FastAPI app, CORS, startup lifecycle
+│   │   │   ├── config.py       # Pydantic BaseSettings from .env
+│   │   │   ├── api/            # Routes, JWT auth, debounce middleware
+│   │   │   ├── agent/          # ReAct orchestrator, system prompt, LLM client, tools/
+│   │   │   ├── db/             # SQLAlchemy models, database setup, repositories
+│   │   │   ├── vector/         # ChromaDB client and embedding helpers
+│   │   │   ├── cache/          # Redis client with in-memory fallback, session state
+│   │   │   └── schemas/        # Pydantic request/response models
+│   │   ├── data/
+│   │   │   ├── knowledge/      # Practice markdown (Tier 1) + API cache
+│   │   │   └── chroma/         # ChromaDB persistent storage (gitignored)
+│   │   ├── scripts/
+│   │   │   ├── seed.py         # DB seeding (idempotent)
+│   │   │   └── embed_knowledge.py  # Knowledge embedding pipeline
+│   │   └── tests/
+│   └── frontend/
+│       ├── Dockerfile          # Multi-stage Node 20-alpine build
+│       └── src/
+│           ├── app/            # Next.js App Router pages
+│           ├── components/     # React components (WelcomeScreen, ChatWindow, etc.)
+│           └── lib/            # API client, types
+└── Spec/                       # Design spec + assessment requirements
 ```

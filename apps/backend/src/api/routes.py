@@ -376,3 +376,31 @@ async def identify_patient(
         needs_info=["dob", "insurance"],
         message="Welcome! Mia will help you get set up.",
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/feedback
+# ---------------------------------------------------------------------------
+
+class FeedbackRequest(BaseModel):
+    message_id: str = Field(..., description="Frontend message ID")
+    feedback: Literal["up", "down"] = Field(..., description="Thumbs up or down")
+    session_id: str | None = Field(None, description="Session ID for context")
+
+
+@router.post("/feedback")
+async def submit_feedback(
+    body: FeedbackRequest,
+    token: TokenData = Depends(verify_token),
+):
+    """Record user feedback on an assistant message.
+
+    Stored as a log entry for now — can be expanded to a DB table later.
+    """
+    logger.info(
+        "Feedback received: session=%s message=%s feedback=%s",
+        token.session_id,
+        body.message_id,
+        body.feedback,
+    )
+    return {"status": "ok"}
