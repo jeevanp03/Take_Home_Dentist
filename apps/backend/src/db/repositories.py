@@ -15,7 +15,7 @@ from typing import Literal
 
 from sqlalchemy import select, and_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from src.db.models import (
     Appointment,
@@ -307,10 +307,11 @@ class AppointmentRepository:
 
         stmt = (
             select(Appointment)
+            .options(joinedload(Appointment.slot))
             .where(and_(*conditions))
             .order_by(Appointment.created_at.desc())
         )
-        return list(db.execute(stmt).scalars().all())
+        return list(db.execute(stmt).scalars().unique().all())
 
 
 # ---------------------------------------------------------------------------

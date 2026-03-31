@@ -194,50 +194,34 @@
 
 ## Phase 2B: Agent Tools (~1.5 hr)
 
-- [ ] **2B.1** Create Pydantic input/output schemas (`src/schemas/__init__.py`)
-  - Schemas for all 11 tools
-  - Note: Pydantic schemas validate at execution time; Gemini function declarations are separate (derived from these in 2B.7)
+- [x] **2B.1** Create Pydantic input/output schemas (`src/schemas/__init__.py`)
+  - 12 schemas for all tools (11 original + update_patient for pre-agent flow)
+  - Pydantic validates at execution time; Gemini declarations derived automatically from schemas
 
-- [ ] **2B.2** Implement knowledge tools (`src/agent/tools/knowledge.py`, `conversations.py`)
-  - `search_knowledge_base(query)`:
-    - Retrieve **top-5** from ChromaDB (not top-3)
-    - Apply **MMR** (Maximal Marginal Relevance) to select 3 diverse results
-    - Apply **similarity threshold** — reject chunks with cosine distance > 0.5 (return fewer or none)
-    - Return chunks with source metadata AND similarity score
-    - **Source weighting**: boost practice doc scores for office-specific queries
-  - `search_past_conversations(patient_id, query)`:
-    - Query `conversations` collection filtered by patient_id metadata
-    - Return top 3 summaries
+- [x] **2B.2** Implement knowledge tools (`src/agent/tools/knowledge.py`, `conversations.py`)
+  - `search_knowledge_base`: top-5 → MMR (lambda=0.5, numpy) → top-3, cosine distance threshold 0.5, practice doc boost +0.1
+  - `search_past_conversations`: top-3 filtered by patient_id metadata
 
-- [ ] **2B.3** Implement patient tools (`src/agent/tools/patients.py`)
-  - `lookup_patient(name, phone?, dob?)` → patient record or "not found"
-  - `create_patient(full_name, phone, dob, insurance_name?)` → new record, handle duplicate phone gracefully
-  - **Both tools update Redis session** with `patient_id` on success (so subsequent tool calls don't re-lookup)
+- [x] **2B.3** Implement patient tools (`src/agent/tools/patients.py`)
+  - `lookup_patient`, `create_patient`, `update_patient` (new — for pre-agent flow DOB/insurance collection)
+  - All update Redis session with patient_id on success
 
-- [ ] **2B.4** Implement appointment tools (`src/agent/tools/appointments.py`)
-  - `get_available_slots(date_start, date_end, time_preference?)` → formatted slot list (paginated if > 5 results — show first 5, mention more available)
-  - `book_appointment(patient_id, slot_id, type, notes?)` → transactional, confirmation or "slot unavailable"
-  - `reschedule_appointment(appointment_id, new_slot_id)` → atomic swap
-  - `cancel_appointment(appointment_id)` → free slot, confirmation
-  - `get_patient_appointments(patient_id)` → upcoming appointments list
-  - **book_appointment updates Redis** `booking_state` on success
+- [x] **2B.4** Implement appointment tools (`src/agent/tools/appointments.py`)
+  - `get_available_slots` (paginated: first 5, total count), `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `get_patient_appointments`
+  - Human-readable formatting: "Wednesday, April 1" / "2:00 PM"
+  - book_appointment updates Redis booking_state
 
-- [ ] **2B.5** Implement notification tool (`src/agent/tools/notifications.py`)
-  - `notify_staff(type, message, patient_id?)` → log + store, return confirmation
-  - Types: "emergency", "special_request", "escalation"
+- [x] **2B.5** Implement notification tool (`src/agent/tools/notifications.py`)
+  - `notify_staff` with emergency/special_request/escalation types, in-memory store for demo
 
-- [ ] **2B.6** Implement practice info tool (`src/agent/tools/practice_info.py`)
-  - `get_practice_info()` → static dict with hours, location, phone, providers, insurance accepted
-  - **No vector search** — instant response for the most common query ("what are your hours?")
-  - Data sourced from a config dict or `office_info.md` loaded at startup
+- [x] **2B.6** Implement practice info tool (`src/agent/tools/practice_info.py`)
+  - Static dict sourced from office_info.md content — instant, no vector search
 
-- [ ] **2B.7** Create tool registry (`src/agent/tools/__init__.py`)
-  - `TOOL_REGISTRY`: dict mapping name → {pydantic_schema, handler, gemini_declaration}
-  - `get_tool_declarations()` → list of `genai.types.Tool(function_declarations=[...])` — must use SDK objects (`FunctionDeclaration`, `Schema` with `type_` field), NOT raw JSON dicts
-  - `execute_tool(name, args, db, session)` → validate via Pydantic, call handler, update session state if applicable, return result
-  - **Tool result format**: return clean structured JSON dict (not raw Python objects) — this is what Gemini sees in `FunctionResponse`
-  - Validation errors → descriptive error string back to agent so it can self-correct
-  - **Per-tool timeout**: wrap execution in `asyncio.wait_for(timeout=10)` — prevent hangs
+- [x] **2B.7** Create tool registry (`src/agent/tools/__init__.py`)
+  - `TOOL_REGISTRY`: 12 tools with handler, Pydantic schema, inject requirements, description
+  - `get_tool_declarations()` → auto-generates `google.genai.types.FunctionDeclaration` from Pydantic schemas
+  - `execute_tool()` → validates via Pydantic, injects db/session_id, 10s timeout, returns clean JSON dict
+  - Validation errors → descriptive error back to agent for self-correction
 
 ---
 
