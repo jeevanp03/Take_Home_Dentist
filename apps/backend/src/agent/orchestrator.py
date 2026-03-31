@@ -105,6 +105,30 @@ def _error_chunk(msg: str) -> dict[str, str]:
     return {"type": "error", "content": msg}
 
 
+def _tool_status_chunk(tool_name: str) -> dict[str, str]:
+    """Return a tool_status SSE chunk with a human-friendly description."""
+    return {"type": "tool_status", "content": _tool_display_name(tool_name)}
+
+
+_TOOL_LABELS: dict[str, str] = {
+    "search_knowledge_base": "Searching dental knowledge base...",
+    "search_past_conversations": "Checking past conversations...",
+    "lookup_patient": "Looking up patient records...",
+    "create_patient": "Creating patient record...",
+    "get_available_slots": "Searching for available slots...",
+    "book_appointment": "Booking your appointment...",
+    "reschedule_appointment": "Rescheduling appointment...",
+    "cancel_appointment": "Cancelling appointment...",
+    "get_patient_appointments": "Checking your appointments...",
+    "notify_staff": "Notifying our team...",
+    "get_practice_info": "Looking up practice info...",
+}
+
+
+def _tool_display_name(tool_name: str) -> str:
+    return _TOOL_LABELS.get(tool_name, f"Working on it...")
+
+
 # ---------------------------------------------------------------------------
 # Input sanitisation
 # ---------------------------------------------------------------------------
@@ -372,6 +396,13 @@ async def run(
 
         # --- Step 2: Load/create session, append user message -------------
         session = await get_session(session_id)
+        logger.debug(
+            "Session %s state: intent=%s, patient_id=%s, patient_name=%s",
+            session_id,
+            session.get("intent"),
+            session.get("patient_id"),
+            session.get("patient_name"),
+        )
         await append_message(session_id, {"role": "user", "content": clean_input})
         # Refresh session after append
         session = await get_session(session_id)
@@ -453,6 +484,9 @@ async def run(
                 tool_name = fc["name"]
                 tool_args = fc.get("args", {})
 
+                # Send real-time tool status to frontend
+                yield _tool_status_chunk(tool_name)
+
                 # Store function_call in session
                 await append_message(session_id, fc)
 
@@ -476,6 +510,7 @@ async def run(
                 types.Content(role="user", parts=function_response_parts)
             )
 
+            yield {"type": "tool_status", "content": "Putting it all together..."}
             response = await call_gemini(contents=contents, config=config)
 
             # Check for blocked/truncated mid-loop

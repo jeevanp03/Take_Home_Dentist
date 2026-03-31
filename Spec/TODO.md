@@ -172,7 +172,7 @@
 
 - [x] **2A.1** Create Gemini LLM client (`src/agent/llm.py`)
   - Migrated to `google-genai` SDK (client-based API, replaces deprecated `google-generativeai`)
-  - Model: `gemini-2.0-flash`
+  - Model: `gemini-2.5-flash`
   - `build_config()` merges generation params, safety, tools, system_instruction into `GenerateContentConfig`
   - **Safety settings**: `BLOCK_ONLY_HIGH` for all harm categories — dental content safe
   - `asyncio.Semaphore(MAX_CONCURRENT_LLM_CALLS)` wrapping all calls

@@ -148,7 +148,7 @@ Tools that modify session state (lookup_patient, create_patient, book_appointmen
 
 ## Gemini Configuration
 
-- Model: `gemini-2.0-flash`
+- Model: `gemini-2.5-flash`
 - SDK: `google-genai` (client-based, not the deprecated `google-generativeai`)
 - Client pattern: `genai.Client(api_key=...)` → `client.aio.models.generate_content()`
 - Config: `types.GenerateContentConfig` merges generation params, safety, tools, system_instruction

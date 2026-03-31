@@ -20,7 +20,7 @@ from src.agent.orchestrator import run as orchestrator_run
 from src.agent.tools.appointments import _fmt_date, _fmt_time
 from src.api.auth import TokenData, verify_token
 from src.api.debounce import debounce_message
-from src.cache.session import get_session, update_session
+from src.cache.session import append_message, get_session, update_session
 from src.db.database import get_db
 from src.db.models import AppointmentStatus
 from src.db.repositories import (
@@ -324,6 +324,14 @@ async def identify_patient(
             patient_context={"appointments": appt_summaries},
         )
 
+        # Seed the greeting into session history so the agent knows what
+        # was already displayed to the patient (greeting is built client-side).
+        greeting = f"Welcome back, {patient.full_name}!"
+        if appt_summaries:
+            greeting += " You have upcoming appointments: " + "; ".join(appt_summaries) + "."
+        greeting += " How can I help you today?"
+        await append_message(session_id, {"role": "assistant", "content": greeting})
+
         logger.info("Returning patient identified: %s", patient.id)
 
         return IdentifyResponse(
@@ -345,6 +353,10 @@ async def identify_patient(
             patient_id=existing.id,
             patient_name=existing.full_name,
         )
+        await append_message(session_id, {
+            "role": "assistant",
+            "content": f"Welcome back, {existing.full_name}! It looks like you already have an account. How can I help you today?",
+        })
         return IdentifyResponse(
             status="existing",
             patient_id=existing.id,
@@ -366,6 +378,14 @@ async def identify_patient(
         patient_id=result.id,
         patient_name=result.full_name,
     )
+
+    # Seed the greeting into session history
+    new_greeting = (
+        f"Welcome to Bright Smile Dental, {result.full_name}! "
+        "I'm Mia, and I'll help you get set up. "
+        "I just need a couple more details — what's your date of birth?"
+    )
+    await append_message(session_id, {"role": "assistant", "content": new_greeting})
 
     logger.info("New patient created: %s", result.id)
 

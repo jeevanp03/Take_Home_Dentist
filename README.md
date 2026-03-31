@@ -1,3 +1,4 @@
+
 # Dental Practice Chatbot
 
 An agentic AI assistant that handles patient intake, appointment booking/rescheduling/cancellation, and dental knowledge Q&A for dental practices.
@@ -11,7 +12,7 @@ An agentic AI assistant that handles patient intake, appointment booking/resched
 | Database | SQLite (dev) / Postgres (prod) via SQLAlchemy 2.0 |
 | Vector DB | ChromaDB embedded (PersistentClient, in-process) |
 | Cache | Redis 7 for conversation state (30-min TTL) |
-| LLM | Gemini 2.0 Flash via google-genai SDK |
+| LLM | Gemini 2.5 Flash via google-genai SDK |
 | Agent | ReAct loop with 11 tools |
 
 ## Quick Start (Docker Compose)
@@ -214,6 +215,9 @@ cd apps/backend
 ```
 data: {"type": "text", "content": "Hello! I'm Mia..."}
 data: {"type": "text", "content": "Let me check that for you."}
+data: {"type": "tool_status", "content": "Searching for available slots..."}
+data: {"type": "tool_status", "content": "Putting it all together..."}
+data: {"type": "text", "content": "Here are your options: ..."}
 data: [DONE]
 ```
 
@@ -231,7 +235,7 @@ Fully decoupled frontend/backend connected via HTTP + SSE. Either layer can be s
 └─────────────┘                  │  │  ReAct Agent (Orchestrator)      │    │
                                   │  │  - 11 tools, max 5 iterations   │    │
                                   │  │  - Session-level mutex           │    │
-                                  │  │  - Gemini 2.0 Flash (temp=0.4)  │    │
+                                  │  │  - Gemini 2.5 Flash (temp=0.4)  │    │
                                   │  └──────────┬───────────────────────┘    │
                                   │             │                            │
                                   │  ┌──────────▼───────────────────────┐    │

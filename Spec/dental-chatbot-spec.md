@@ -1295,7 +1295,7 @@ dental-chatbot/
 
 - [ ] **2A.1** `src/agent/llm.py`:
   - `google.generativeai` configured with API key
-  - Model: `gemini-2.0-flash`
+  - Model: `gemini-2.5-flash`
   - Function declarations array (Gemini tool calling format)
   - Streaming: `model.generate_content(stream=True, tools=tools)`
   - Retry with exponential backoff (max 2)

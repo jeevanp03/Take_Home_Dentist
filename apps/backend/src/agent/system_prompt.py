@@ -250,8 +250,9 @@ def _build_patient_context(session: dict) -> str:
     if mode == "returning" and patient_id:
         lines.append("Mode: RETURNING PATIENT")
         lines.append(f"Patient name: {patient_name}")
-        # patient_id intentionally omitted from prompt — it is available
-        # in the session for tool use but should not be sent to the LLM.
+        lines.append(f"Patient ID: {patient_id}")
+        lines.append("Use this patient_id when calling tools (get_patient_appointments, book_appointment, etc.).")
+        lines.append("Do NOT ask for name, phone, or date of birth — the patient is already verified.")
         appointments = patient_context.get("appointments")
         if appointments:
             lines.append("Upcoming appointments:")
@@ -264,6 +265,9 @@ def _build_patient_context(session: dict) -> str:
     elif mode == "new" and patient_name:
         lines.append("Mode: NEW PATIENT")
         lines.append(f"Patient name: {patient_name}")
+        if patient_id:
+            lines.append(f"Patient ID: {patient_id}")
+            lines.append("Use this patient_id when calling tools.")
         lines.append("Still needed: date of birth, insurance status.")
 
     else:
