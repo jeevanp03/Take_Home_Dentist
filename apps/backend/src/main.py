@@ -8,6 +8,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text as sa_text
+
 from src.api.auth_routes import router as auth_router
 from src.api.routes import router as core_router
 from src.cache.redis_client import close_redis, get_redis, is_using_fallback
@@ -93,5 +95,34 @@ app.include_router(core_router)
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint."""
-    return {"status": "ok", "service": "dental-chatbot-api"}
+    """Health check with service connectivity status."""
+    services = {}
+
+    # Database
+    try:
+        from src.db.database import SessionLocal
+        db = SessionLocal()
+        db.execute(sa_text("SELECT 1"))
+        db.close()
+        services["database"] = "ok"
+    except Exception:
+        services["database"] = "error"
+
+    # Redis
+    services["redis"] = "fallback" if is_using_fallback() else "ok"
+
+    # ChromaDB
+    try:
+        from src.vector.chroma_client import get_knowledge_collection
+        kb = get_knowledge_collection()
+        services["chroma"] = f"ok ({kb.count()} docs)"
+    except Exception:
+        services["chroma"] = "error"
+
+    overall = "ok" if all(v.startswith("ok") for v in services.values()) else "degraded"
+
+    return {
+        "status": overall,
+        "service": "dental-chatbot-api",
+        "services": services,
+    }

@@ -247,52 +247,27 @@
 - [x] **3A.1** Create JWT auth helpers (`src/api/auth.py`) — HS256 via python-jose, `create_access_token()`, `verify_token()` FastAPI dependency, 1hr expiry
 - [x] **3A.2** Create auth routes (`src/api/auth_routes.py`) — `POST /api/auth/token` (no auth), `POST /api/auth/refresh` (requires valid JWT), registered in main.py
 - [x] **3A.3** Create patient identification endpoint (`src/api/routes.py`) — `POST /api/identify` with returning/new/question modes, phone normalization, duplicate detection, patient context injection into Redis session
-- [x] **3A.4** Protect routes with JWT — `/api/identify` and `/api/auth/refresh` require `Depends(verify_token)`, session_id from JWT claims. 15 endpoint tests (token creation, refresh, auth enforcement, all 3 identify modes, duplicate detection, validation errors)
+- [x] **3A.4** Protect routes with JWT — `/api/identify` and `/api/auth/refresh` require `Depends(verify_token)`, session_id from JWT claims. 16 endpoint tests (token creation, refresh, expired token, auth enforcement, all 3 identify modes, duplicate detection, validation errors)
 
 ---
 
-## Phase 3B: Concurrency Safety (~20 min)
+## Phase 3B: Concurrency Safety (~20 min) ✅
 
-- [ ] **3B.1** Verify LLM semaphore works under load (built in 2A.1)
-- [ ] **3B.2** Verify SQLAlchemy pooling + WAL mode + double-booking prevention
-  - Two simultaneous bookings for same slot → only one succeeds, other gets "slot unavailable"
-- [ ] **3B.3** Verify Redis connection pooling + session locks under concurrent use
+- [x] **3B.1** Verify LLM semaphore — 20 concurrent tasks capped at 10 active, all released cleanly
+- [x] **3B.2** Verify double-booking prevention — second booking returns error dict, slot marked unavailable, cancel frees slot, reschedule is atomic swap (4 tests)
+- [x] **3B.3** Verify session locks — acquire/release lifecycle, contention returns None, wrong token doesn't release, session CRUD basic lifecycle (4 tests)
 
 ---
 
-## Phase 3C: SSE Streaming + API Wiring (~45 min)
+## Phase 3C: SSE Streaming + API Wiring (~45 min) ✅
 
-- [ ] **3C.1** Create API routes file (`src/api/routes.py`) and wire `POST /api/chat` → orchestrator → SSE
-  - `StreamingResponse` with `media_type="text/event-stream"`
-  - Format: `data: {"type": "text", "content": "..."}\n\n` + `data: [DONE]\n\n`
-  - Headers: `Cache-Control: no-cache`, `X-Accel-Buffering: no`
-  - Register router in `main.py`
-
-- [ ] **3C.2** Wire `GET /api/slots` endpoint
-  - Optional date param, JWT protected, returns JSON slot list
-
-- [ ] **3C.3** Extend startup event and health check
-  - Startup: `init_db()`, verify Redis, init ChromaDB, **Gemini warm-up call** (first call is slow on cold process)
-  - `GET /api/health` → `{status, services: {db, redis, chroma}}` with actual connectivity checks
-
-- [ ] **3C.4** Create SMS debounce middleware (`src/api/debounce.py`)
-  - Hold incoming messages for **2-3 seconds**, concatenate if more arrive for same session_id, then dispatch to orchestrator
-  - Prevents "Hi" [send] "I need" [send] "a cleaning" [send] from triggering 3 separate agent runs
-  - Use Redis or in-memory dict with asyncio timer
-
-- [ ] **3C.5** Add error handling for streaming responses
-  - LLM error → stream "I'm having trouble right now — you can reach us at (555) 123-4567"
-  - DB error → stream "I can't access our scheduling system right now — please try again in a moment"
-  - ChromaDB error → agent still works for booking; knowledge questions get "I don't have that info right now — our front desk can help"
-  - Rate limit (429) → stream "You're sending messages faster than I can keep up — give me a moment" (NOT a raw HTTP 429)
-  - Never let unhandled exceptions kill the stream silently
-
-- [ ] **3C.6** Add rate limiting
-  - 10 msg/min per session_id via Redis counter with TTL
-  - Return friendly in-chat message (not HTTP 429) when exceeded
-
-- [ ] **3C.7** Test full backend with curl
-  - Get token → chat with token → verify SSE stream → slots → no-token 401
+- [x] **3C.1** Wire `POST /api/chat` → orchestrator → SSE `StreamingResponse` with `data: {json}\n\n` + `data: [DONE]\n\n`, Cache-Control/X-Accel-Buffering headers
+- [x] **3C.2** Wire `GET /api/slots` — optional date_start/date_end/provider query params, JWT protected, returns formatted slot list with ISO dates
+- [x] **3C.3** Enhanced `GET /api/health` — returns `{status, services: {database, redis, chroma}}` with actual connectivity checks
+- [x] **3C.4** SMS debounce (`src/api/debounce.py`) — 2.5s buffer window, concatenates rapid messages for same session, dispatches once
+- [x] **3C.5** Stream-safe error handling — try/except wraps entire SSE generator, errors streamed as `{"type":"error"}` events, never kills stream silently
+- [x] **3C.6** Rate limiting — 10 msg/min per session_id via in-memory sliding window, returns friendly in-chat message (not HTTP 429)
+- [x] **3C.7** All routes verified: `POST /api/auth/token`, `POST /api/auth/refresh`, `POST /api/chat`, `POST /api/identify`, `GET /api/slots`, `GET /api/health`
 
 ---
 
